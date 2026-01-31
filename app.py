@@ -89,7 +89,7 @@ if st.button("Guardar Cambios en Supabase"):
         registros = datos_a_enviar.to_dict('records')
         
         # Enviamos a Supabase
-        response = supabase.table('entregas').upsert(registros).execute()
+        response = supabase.table('prefacturas_pedidos').upsert(registros).execute()
         
         # 4. Mensaje de éxito
         st.success("¡Cambios guardados correctamente en la nube!")
@@ -111,6 +111,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

@@ -4,7 +4,7 @@ from supabase import create_client, Client
 from datetime import datetime
 
 # 1. Configuración de la página (Debe ser lo primero)
-st.set_page_config(page_title="Control Entregas INGENICA", layout="wide")
+st.set_page_config(page_title="PREFACTURAS INGENICA", layout="wide")
 
 # 2. Conexión a Supabase (Usa st.secrets en producción)
 # Por ahora pon tus llaves aquí para probar, luego las movemos a un archivo seguro
@@ -101,5 +101,6 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 

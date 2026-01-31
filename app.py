@@ -64,7 +64,7 @@ df_editado = st.data_editor(
     column_config={
         "fecha_elaboracion": st.column_config.DateColumn("Fecha Elaboración"),
         "fecha_firma_dnds": st.column_config.DateColumn("Firma DNDS"),
-        "area": st.column_config.SelectboxColumn("Área", options=["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER"]),
+        "area": st.column_config.SelectboxColumn("Área", options=["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER","CAMPAÑA","PSSEN"]),
         # Ocultamos columnas técnicas que no deben tocar
         "id": st.column_config.Column(disabled=True),
         "created_at": st.column_config.Column(disabled=True),
@@ -123,6 +123,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

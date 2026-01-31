@@ -18,7 +18,7 @@ def init_connection():
 supabase = init_connection()
 
 # 3. Título y Métricas Rápidas
-st.title("⚡ Control de Entregas - INGENICA")
+st.title("⚡ PREFACTURAS - INGENICA")
 
 # Función para cargar datos
 def cargar_datos():
@@ -101,6 +101,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

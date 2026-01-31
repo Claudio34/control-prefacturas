@@ -106,13 +106,13 @@ df_editado = st.data_editor(
     },
     use_container_width=True
 )
-# --- Botón de Guardar (Versión Blindada) ---
+# --- Botón de Guardar (Versión Divide y Vencerás) ---
 if st.button("Guardar Cambios en Supabase"):
     try:
         # 1. Preparar los datos
         datos_a_enviar = df_editado.copy()
 
-        # 2. CONVERSIÓN DE FECHAS (Esto ya funciona bien, lo mantenemos)
+        # 2. CONVERSIÓN DE FECHAS (Tu traductor que ya funciona)
         columnas_fechas_guardar = [
             "fecha_elaboracion", "fecha_formato", "fecha_solicitud_modificacion", 
             "fecha_entrega_post_modificacion", "fecha_conciliacion", 
@@ -122,40 +122,49 @@ if st.button("Guardar Cambios en Supabase"):
 
         for col in columnas_fechas_guardar:
             if col in datos_a_enviar.columns:
-                # Forzamos formato YYYY-MM-DD
                 datos_a_enviar[col] = pd.to_datetime(datos_a_enviar[col], dayfirst=True, errors='coerce').dt.strftime('%Y-%m-%d')
-                # Convertimos 'NaT' y vacíos a None
                 datos_a_enviar[col] = datos_a_enviar[col].replace(['nan', 'NaT', 'None', '<NA>'], None)
                 datos_a_enviar[col] = datos_a_enviar[col].where(pd.notnull(datos_a_enviar[col]), None)
 
         # 3. Convertir a lista de diccionarios
         registros = datos_a_enviar.to_dict('records')
         
-        # 4. LIMPIEZA AGRESIVA PARA FILAS NUEVAS (Aquí estaba el detalle)
-        registros_limpios = []
+        # 4. LIMPIEZA Y SEPARACIÓN (Aquí está el truco nuevo)
+        registros_actualizar = [] # Filas viejas (tienen ID)
+        registros_crear = []      # Filas nuevas (no tienen ID)
+
         for reg in registros:
             nuevo_reg = reg.copy()
-            
-            # Obtenemos el valor del ID
             id_val = nuevo_reg.get('id')
             
-            # Lógica reforzada: Si es None, NaN, o texto vacío... ¡BORRARLO!
-            if id_val is None or pd.isna(id_val) or str(id_val).strip() == "":
-                if 'id' in nuevo_reg:
-                    del nuevo_reg['id']
-            
-            # Limpiamos created_at también si está vacío
+            # Limpiamos created_at si está vacío
             if pd.isna(nuevo_reg.get('created_at')):
                 if 'created_at' in nuevo_reg: del nuevo_reg['created_at']
-            
-            registros_limpios.append(nuevo_reg)
 
-        # 5. Enviamos a Supabase (Verificando el nombre de tu tabla)
-        response = supabase.table('prefacturas_pedidos').upsert(registros_limpios).execute()
+            # CLASIFICACIÓN: ¿Es nuevo o viejo?
+            if id_val is None or pd.isna(id_val) or str(id_val).strip() == "":
+                # ES NUEVO: Borramos el ID para que Supabase lo invente
+                if 'id' in nuevo_reg: del nuevo_reg['id']
+                registros_crear.append(nuevo_reg)
+            else:
+                # ES VIEJO: Lo dejamos tal cual para actualizar
+                registros_actualizar.append(nuevo_reg)
+
+        # 5. ENVIAR POR SEPARADO
+        # A) Actualizamos los existentes (Upsert)
+        if len(registros_actualizar) > 0:
+            supabase.table('prefacturas_pedidos').upsert(registros_actualizar).execute()
+            
+        # B) Insertamos los nuevos (Insert)
+        if len(registros_crear) > 0:
+            supabase.table('prefacturas_pedidos').insert(registros_crear).execute()
         
         # 6. Éxito
         st.success("¡Cambios guardados correctamente!")
         st.balloons()
+        
+        # Recargar para ver los nuevos IDs asignados
+        # st.rerun() 
 
     except Exception as e:
         st.error(f"Error al guardar: {e}")
@@ -170,6 +179,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

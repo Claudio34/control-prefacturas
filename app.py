@@ -4,7 +4,7 @@ from supabase import create_client, Client
 from datetime import datetime
 
 # 1. Configuración de la página (Debe ser lo primero)
-st.set_page_config(page_title="PREFACTURAS - INGENIERIA Y SUPERVISION", layout="wide")
+st.set_page_config(page_title="PREFACTURAS", layout="wide")
 
 # 2. Conexión a Supabase (Usa st.secrets en producción)
 # Por ahora pon tus llaves aquí para probar, luego las movemos a un archivo seguro
@@ -18,7 +18,7 @@ def init_connection():
 supabase = init_connection()
 
 # 3. Título y Métricas Rápidas
-st.title("⚡ PROYECTO DE INGENIERIA Y SUPERVISION (DNDS) - SEGUIMIENTO DE PREFACTURAS ")
+st.title("⚡ PREFACTURAS (DNDS)")
 
 # Función para cargar datos
 def cargar_datos():
@@ -226,6 +226,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

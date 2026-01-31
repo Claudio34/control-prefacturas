@@ -72,22 +72,32 @@ df_editado = st.data_editor(
     use_container_width=True
 )
 
-# --- BOTÓN DE GUARDAR ---
-if st.button("💾 Guardar Cambios en Supabase", type="primary"):
-    # Lógica simplificada de guardado
-    # 1. Convertir el DF editado a diccionarios
-    datos_a_subir = df_editado.to_dict(orient='records')
-    
-    # 2. Upsert (Actualizar o Insertar) masivo
-    # Nota: Upsert funciona si el 'id' existe. Si es nuevo, Supabase lo crea.
+# --- Botón de Guardar ---
+if st.button("Guardar Cambios en Supabase"):
     try:
-        # Limpiamos NaNs que pandas genera para fechas vacías, Supabase prefiere None
-        datos_limpios = [{k: (None if pd.isna(v) else v) for k, v in record.items()} for record in datos_a_subir]
+        # 1. Creamos una copia de los datos para prepararlos
+        datos_a_enviar = df_editado.copy()
+
+        # 2. TRUCO DE MAGIA: Convertimos todas las fechas a texto (String)
+        # Esto evita el error "Timestamp is not JSON serializable"
+        for col in datos_a_enviar.select_dtypes(include=['datetime', 'datetimetz']).columns:
+            datos_a_enviar[col] = datos_a_enviar[col].astype(str)
+            # Limpiamos errores de fechas vacías (NaT)
+            datos_a_enviar[col] = datos_a_enviar[col].replace('NaT', None)
+
+        # 3. Convertimos a lista de diccionarios y enviamos
+        registros = datos_a_enviar.to_dict('records')
         
         # Enviamos a Supabase
-        supabase.table('prefacturas_pedidos').upsert(datos_limpios).execute()
-        st.success("¡Datos actualizados correctamente en la nube!")
-        st.rerun() # Recargar la página para ver cambios
+        response = supabase.table('entregas').upsert(registros).execute()
+        
+        # 4. Mensaje de éxito
+        st.success("¡Cambios guardados correctamente en la nube!")
+        st.balloons()
+        
+        # Opcional: Recargar la página tras unos segundos para ver cambios
+        # st.experimental_rerun() 
+
     except Exception as e:
         st.error(f"Error al guardar: {e}")
 
@@ -101,6 +111,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

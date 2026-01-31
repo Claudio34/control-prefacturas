@@ -77,20 +77,38 @@ st.info("Edita las celdas directamente y presiona 'Guardar Cambios' al final.")
 # El editor de datos mágico de Streamlit
 # num_rows="dynamic" permite agregar nuevas filas
 df_editado = st.data_editor(
-    df, 
-    num_rows="dynamic", 
+    df,
+    num_rows="dynamic",
     hide_index=True,
     column_config={
-        "fecha_elaboracion": st.column_config.DateColumn("Fecha Elaboración"),
-        "fecha_firma_dnds": st.column_config.DateColumn("Firma DNDS"),
-        "area": st.column_config.SelectboxColumn("Área", options=["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER","CAMPAÑA","PSSEN"]),
-        # Ocultamos columnas técnicas que no deben tocar
+        # --- CONFIGURACIÓN DE FECHAS (Formato Latino DD/MM/AAAA) ---
+        "fecha_elaboracion": st.column_config.DateColumn("Fecha Elaboración", format="DD/MM/YYYY", required=False),
+        "fecha_formato": st.column_config.DateColumn("Fecha Formato", format="DD/MM/YYYY", required=False),
+        "fecha_solicitud_modificacion": st.column_config.DateColumn("Fecha Sol. Modif.", format="DD/MM/YYYY", required=False),
+        "fecha_entrega_post_modificacion": st.column_config.DateColumn("Fecha Entrega Post Modif.", format="DD/MM/YYYY", required=False),
+        "fecha_conciliacion": st.column_config.DateColumn("Fecha Conciliación", format="DD/MM/YYYY", required=False),
+        "fecha_firma_ingenica": st.column_config.DateColumn("Firma Ingenica", format="DD/MM/YYYY", required=False),
+        "fecha_entrega_final_ingenica_central": st.column_config.DateColumn("Entrega Final Central", format="DD/MM/YYYY", required=False),
+
+        # --- CONFIGURACIÓN FIRMA DNDS (Menú SI/NO) ---
+        "fecha_firma_dnds": st.column_config.SelectboxColumn(
+            "Firma DNDS",
+            options=["SI", "NO"],
+            required=False,
+            help="Selecciona SI o NO"
+        ),
+
+        # --- OTRAS COLUMNAS ---
+        "area": st.column_config.SelectboxColumn(
+            "Área", 
+            options=["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER", "CAMPAÑA"]
+        ),
+        # Ocultamos columnas técnicas
         "id": st.column_config.Column(disabled=True),
         "created_at": st.column_config.Column(disabled=True),
     },
     use_container_width=True
 )
-
 # --- Botón de Guardar ---
 if st.button("Guardar Cambios en Supabase"):
     try:
@@ -152,6 +170,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

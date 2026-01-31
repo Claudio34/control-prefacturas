@@ -29,6 +29,23 @@ def cargar_datos():
 # Cargar el dataframe
 df = cargar_datos()
 
+# --- NUEVO BLOQUE: Convertir texto a fechas reales para activar los calendarios ---
+columnas_fechas = [
+    "fecha_elaboracion", 
+    "fecha_formato", 
+    "fecha_solicitud_modificacion", 
+    "fecha_entrega_post_modificacion", 
+    "fecha_conciliacion", 
+    "fecha_firma_ingenica",
+    "fecha_entrega_final_ingenica_central"
+]
+
+for col in columnas_fechas:
+    if col in df.columns:
+        # Esto convierte el texto a objetos de fecha que Streamlit entiende
+        df[col] = pd.to_datetime(df[col], errors='coerce')
+# -----------------------------------------------------------------------------
+
 # --- SECCIÓN DE INDICADORES (Dashboard) ---
 if not df.empty:
     col1, col2, col3 = st.columns(3)
@@ -123,6 +140,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

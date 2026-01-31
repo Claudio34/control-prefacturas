@@ -79,6 +79,43 @@ df_editado = st.data_editor(
     num_rows="dynamic",
     hide_index=True,
     column_config={
+        # --- 01. SECTOR (Combobox) ---
+        "sector": st.column_config.SelectboxColumn(
+            "Sector",
+            options=["MANAGUA", "NORTE", "OCCIDENTE", "ORIENTE", "SUR"],
+            required=False,
+            width="medium"
+        ),
+
+        # --- 02. SUBSECTOR (Combobox) ---
+        "subsector": st.column_config.SelectboxColumn(
+            "Subsector",
+            options=["MANAGUA DS", "MANAGUA DN", "NORTE", "OCCIDENTE", "ORIENTE", "SUR"],
+            required=False,
+            width="medium"
+        ),
+
+        # --- 03. PERIODO (Combobox con 1Q y 2Q) ---
+        "periodo": st.column_config.SelectboxColumn(
+            "Periodo",
+            options=[
+                "ENERO 1Q", "ENERO 2Q", 
+                "FEBRERO 1Q", "FEBRERO 2Q", 
+                "MARZO 1Q", "MARZO 2Q",
+                "ABRIL 1Q", "ABRIL 2Q", 
+                "MAYO 1Q", "MAYO 2Q", 
+                "JUNIO 1Q", "JUNIO 2Q",
+                "JULIO 1Q", "JULIO 2Q", 
+                "AGOSTO 1Q", "AGOSTO 2Q", 
+                "SEPTIEMBRE 1Q", "SEPTIEMBRE 2Q",
+                "OCTUBRE 1Q", "OCTUBRE 2Q", 
+                "NOVIEMBRE 1Q", "NOVIEMBRE 2Q", 
+                "DICIEMBRE 1Q", "DICIEMBRE 2Q"
+            ],
+            required=False,
+            width="medium"
+        ),
+
         # --- CONFIGURACIÓN DE FECHAS (Calendarios) ---
         "fecha_elaboracion": st.column_config.DateColumn("Fecha Elaboración", format="DD/MM/YYYY", required=False),
         "fecha_formato": st.column_config.DateColumn("Fecha Formato", format="DD/MM/YYYY", required=False),
@@ -88,7 +125,7 @@ df_editado = st.data_editor(
         "fecha_firma_ingenica": st.column_config.DateColumn("Firma Ingenica", format="DD/MM/YYYY", required=False),
         "fecha_entrega_final_ingenica_central": st.column_config.DateColumn("Entrega Final Central", format="DD/MM/YYYY", required=False),
         
-        # --- FIRMA DNDS (VUELVE A SER FECHA) ---
+        # --- FIRMA DNDS (Calendario) ---
         "fecha_firma_dnds": st.column_config.DateColumn(
             "Firma DNDS", 
             format="DD/MM/YYYY", 
@@ -96,13 +133,15 @@ df_editado = st.data_editor(
             help="Si está vacía, se considera PENDIENTE"
         ),
 
-        # --- OTRAS CONFIGURACIONES ---
+        # --- ÁREA (Ya lo tenías) ---
         "area": st.column_config.SelectboxColumn(
             "Área", 
             options=["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER", "CAMPAÑA"]
         ),
-        "id": st.column_config.Column(disabled=True),
-        "created_at": st.column_config.Column(disabled=True),
+
+        # --- COLUMNAS TÉCNICAS (Ocultas/Bloqueadas) ---
+        "id": st.column_config.Column(disabled=True, width="small"),
+        "created_at": st.column_config.Column(disabled=True, width="small"),
     },
     use_container_width=True
 )
@@ -179,6 +218,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

@@ -97,35 +97,45 @@ if st.button("Guardar Cambios en Supabase"):
         # 1. Preparar los datos
         datos_a_enviar = df_editado.copy()
 
-        # 2. Convertir fechas a texto (para evitar el error anterior)
-        for col in datos_a_enviar.select_dtypes(include=['datetime', 'datetimetz']).columns:
-            datos_a_enviar[col] = datos_a_enviar[col].astype(str)
-            datos_a_enviar[col] = datos_a_enviar[col].replace('NaT', None)
+        # 2. CONVERSIÓN DE FECHAS (Corrección para el error "date is not JSON serializable")
+        # Definimos explícitamente qué columnas son fechas para convertirlas a texto simple
+        columnas_fechas = [
+            "fecha_elaboracion", 
+            "fecha_formato", 
+            "fecha_solicitud_modificacion", 
+            "fecha_entrega_post_modificacion", 
+            "fecha_conciliacion", 
+            "fecha_firma_ingenica",
+            "fecha_entrega_final_ingenica_central"
+        ]
+
+        for col in columnas_fechas:
+            if col in datos_a_enviar.columns:
+                # Convertimos a texto (YYYY-MM-DD)
+                datos_a_enviar[col] = datos_a_enviar[col].astype(str)
+                # Limpiamos los valores vacíos que quedan como texto 'nan', 'NaT' o 'None'
+                datos_a_enviar[col] = datos_a_enviar[col].replace(['nan', 'NaT', 'None', '<NA>'], None)
 
         # 3. Convertir a lista de diccionarios
         registros = datos_a_enviar.to_dict('records')
         
-        # --- PASO NUEVO: LIMPIEZA PARA FILAS NUEVAS ---
+        # 4. LIMPIEZA PARA FILAS NUEVAS (ID automático)
         registros_limpios = []
         for reg in registros:
-            # Copiamos el diccionario para no afectar el original
             nuevo_reg = reg.copy()
-            
-            # Si el ID es vacio (None o NaN), lo borramos para que Supabase cree uno nuevo auto-incremental
+            # Si el ID está vacío, lo borramos para que Supabase cree uno nuevo
             if pd.isna(nuevo_reg.get('id')):
                 del nuevo_reg['id']
-            
-            # (Opcional) Hacemos lo mismo con 'created_at' si está vacío, para que se ponga la fecha de hoy sola
+            # Limpiamos created_at si es nuevo
             if pd.isna(nuevo_reg.get('created_at')):
                 if 'created_at' in nuevo_reg: del nuevo_reg['created_at']
-
+            
             registros_limpios.append(nuevo_reg)
 
-        # 4. Enviamos la lista limpia a Supabase
-        # Asegúrate que el nombre de la tabla sea correcto ('prefacturas_pedidos')
+        # 5. Enviamos a Supabase
         response = supabase.table('prefacturas_pedidos').upsert(registros_limpios).execute()
         
-        # 5. Éxito
+        # 6. Éxito
         st.success("¡Cambios guardados correctamente!")
         st.balloons()
 
@@ -142,6 +152,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

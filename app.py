@@ -18,7 +18,7 @@ def init_connection():
 supabase = init_connection()
 
 # 3. Título y Métricas Rápidas
-st.title("⚡ PREFACTURAS (DNDS)")
+st.title("⚡ PREFACTURAS")
 
 # Función para cargar datos
 def cargar_datos():
@@ -226,6 +226,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

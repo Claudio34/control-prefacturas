@@ -38,7 +38,8 @@ columnas_fechas = [
     "fecha_conciliacion", 
     "fecha_firma_ingenica",
     "fecha_entrega_final_ingenica_central",
-    "fecha_firma_dnds"  # <--- AGREGADA OTRA VEZ COMO FECHA
+    "fecha_firma_dnds",  # <--- AGREGADA OTRA VEZ COMO FECHA
+    "fecha_edicion_pedido"  # <--- ¡NUEVA AGREGADA AQUÍ!
 ]
 
 for col in columnas_fechas:
@@ -133,6 +134,13 @@ df_editado = st.data_editor(
             help="Si está vacía, se considera PENDIENTE"
         ),
 
+        # --- ¡NUEVA COLUMNA CON CALENDARIO! ---
+        "fecha_edicion_pedido": st.column_config.DateColumn(
+            "Fecha Edición Pedido",
+            format="DD/MM/YYYY",
+            required=False
+        ),
+
         # --- ÁREA (Ya lo tenías) ---
         "area": st.column_config.SelectboxColumn(
             "Área", 
@@ -156,7 +164,7 @@ if st.button("Guardar Cambios en Supabase"):
             "fecha_elaboracion", "fecha_formato", "fecha_solicitud_modificacion", 
             "fecha_entrega_post_modificacion", "fecha_conciliacion", 
             "fecha_firma_ingenica", "fecha_entrega_final_ingenica_central",
-            "fecha_firma_dnds" 
+            "fecha_firma_dnds", "fecha_edicion_pedido"
         ]
 
         for col in columnas_fechas_guardar:
@@ -218,6 +226,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

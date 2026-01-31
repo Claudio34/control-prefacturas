@@ -8,8 +8,8 @@ st.set_page_config(page_title="Control Entregas INGENICA", layout="wide")
 
 # 2. Conexión a Supabase (Usa st.secrets en producción)
 # Por ahora pon tus llaves aquí para probar, luego las movemos a un archivo seguro
-URL = "TU_SUPABASE_URL"
-KEY = "TU_SUPABASE_KEY"
+URL = st.secrets"TU_SUPABASE_URL"
+KEY = st.secrets"TU_SUPABASE_KEY"
 
 @st.cache_resource
 def init_connection():
@@ -99,4 +99,5 @@ st.download_button(
     data=csv,
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
+
 )

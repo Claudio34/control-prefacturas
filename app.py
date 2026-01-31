@@ -112,34 +112,38 @@ if st.button("Guardar Cambios en Supabase"):
         # 1. Preparar los datos
         datos_a_enviar = df_editado.copy()
 
-        # 2. CONVERSIÓN DE FECHAS A TEXTO (Incluyendo Firma DNDS)
+        # 2. CONVERSIÓN DE FECHAS (El Traductor Universal)
+        # Lista de todas tus columnas que son fechas
         columnas_fechas_guardar = [
             "fecha_elaboracion", "fecha_formato", "fecha_solicitud_modificacion", 
             "fecha_entrega_post_modificacion", "fecha_conciliacion", 
             "fecha_firma_ingenica", "fecha_entrega_final_ingenica_central",
-            "fecha_firma_dnds" # <--- Importante incluirla aquí
+            "fecha_firma_dnds" 
         ]
 
         for col in columnas_fechas_guardar:
             if col in datos_a_enviar.columns:
-                datos_a_enviar[col] = datos_a_enviar[col].astype(str)
+                # PASO CLAVE: Forzamos a Pandas a entender que el día va primero (dayfirst=True)
+                # y luego lo convertimos a formato YYYY-MM-DD (Año-Mes-Día)
+                datos_a_enviar[col] = pd.to_datetime(datos_a_enviar[col], dayfirst=True, errors='coerce').dt.strftime('%Y-%m-%d')
+                
+                # Limpiamos los vacíos para que viajen como "null" (None)
                 datos_a_enviar[col] = datos_a_enviar[col].replace(['nan', 'NaT', 'None', '<NA>'], None)
+                datos_a_enviar[col] = datos_a_enviar[col].where(pd.notnull(datos_a_enviar[col]), None)
 
         # 3. Convertir a lista de diccionarios
         registros = datos_a_enviar.to_dict('records')
         
-        # 4. LIMPIEZA PARA FILAS NUEVAS (ESTO ARREGLA TU ERROR DE HOY)
+        # 4. LIMPIEZA PARA FILAS NUEVAS
         registros_limpios = []
         for reg in registros:
             nuevo_reg = reg.copy()
             
-            # --- LA CURA PARA EL ERROR "NULL VALUE IN ID" ---
-            # Si el ID está vacío, lo borramos del diccionario.
-            # Así Supabase sabe que es nuevo y le inventa un ID solo.
+            # Borramos ID si está vacío (para que sea autoincremental)
             if pd.isna(nuevo_reg.get('id')):
                 del nuevo_reg['id']
             
-            # Limpiamos created_at si es nuevo
+            # Borramos created_at si está vacío (para que se ponga la fecha de hoy)
             if pd.isna(nuevo_reg.get('created_at')):
                 if 'created_at' in nuevo_reg: del nuevo_reg['created_at']
             
@@ -148,6 +152,7 @@ if st.button("Guardar Cambios en Supabase"):
         # 5. Enviamos a Supabase
         response = supabase.table('prefacturas_pedidos').upsert(registros_limpios).execute()
         
+        # 6. Éxito
         st.success("¡Cambios guardados correctamente!")
         st.balloons()
 
@@ -164,6 +169,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

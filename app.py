@@ -75,28 +75,40 @@ df_editado = st.data_editor(
 # --- Botón de Guardar ---
 if st.button("Guardar Cambios en Supabase"):
     try:
-        # 1. Creamos una copia de los datos para prepararlos
+        # 1. Preparar los datos
         datos_a_enviar = df_editado.copy()
 
-        # 2. TRUCO DE MAGIA: Convertimos todas las fechas a texto (String)
-        # Esto evita el error "Timestamp is not JSON serializable"
+        # 2. Convertir fechas a texto (para evitar el error anterior)
         for col in datos_a_enviar.select_dtypes(include=['datetime', 'datetimetz']).columns:
             datos_a_enviar[col] = datos_a_enviar[col].astype(str)
-            # Limpiamos errores de fechas vacías (NaT)
             datos_a_enviar[col] = datos_a_enviar[col].replace('NaT', None)
 
-        # 3. Convertimos a lista de diccionarios y enviamos
+        # 3. Convertir a lista de diccionarios
         registros = datos_a_enviar.to_dict('records')
         
-        # Enviamos a Supabase
-        response = supabase.table('prefacturas_pedidos').upsert(registros).execute()
+        # --- PASO NUEVO: LIMPIEZA PARA FILAS NUEVAS ---
+        registros_limpios = []
+        for reg in registros:
+            # Copiamos el diccionario para no afectar el original
+            nuevo_reg = reg.copy()
+            
+            # Si el ID es vacio (None o NaN), lo borramos para que Supabase cree uno nuevo auto-incremental
+            if pd.isna(nuevo_reg.get('id')):
+                del nuevo_reg['id']
+            
+            # (Opcional) Hacemos lo mismo con 'created_at' si está vacío, para que se ponga la fecha de hoy sola
+            if pd.isna(nuevo_reg.get('created_at')):
+                if 'created_at' in nuevo_reg: del nuevo_reg['created_at']
+
+            registros_limpios.append(nuevo_reg)
+
+        # 4. Enviamos la lista limpia a Supabase
+        # Asegúrate que el nombre de la tabla sea correcto ('prefacturas_pedidos')
+        response = supabase.table('prefacturas_pedidos').upsert(registros_limpios).execute()
         
-        # 4. Mensaje de éxito
-        st.success("¡Cambios guardados correctamente en la nube!")
+        # 5. Éxito
+        st.success("¡Cambios guardados correctamente!")
         st.balloons()
-        
-        # Opcional: Recargar la página tras unos segundos para ver cambios
-        # st.experimental_rerun() 
 
     except Exception as e:
         st.error(f"Error al guardar: {e}")
@@ -111,6 +123,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

@@ -29,7 +29,7 @@ def cargar_datos():
 # Cargar el dataframe
 df = cargar_datos()
 
-# --- BLOQUE CORREGIDO: Convertir a SOLO FECHA (sin hora) ---
+# --- BLOQUE 1: Convertir texto a fechas reales (Incluyendo Firma DNDS) ---
 columnas_fechas = [
     "fecha_elaboracion", 
     "fecha_formato", 
@@ -37,15 +37,14 @@ columnas_fechas = [
     "fecha_entrega_post_modificacion", 
     "fecha_conciliacion", 
     "fecha_firma_ingenica",
-    "fecha_entrega_final_ingenica_central"
+    "fecha_entrega_final_ingenica_central",
+    "fecha_firma_dnds"  # <--- AGREGADA OTRA VEZ COMO FECHA
 ]
 
 for col in columnas_fechas:
     if col in df.columns:
-        # 1. Convertir a datetime
-        df[col] = pd.to_datetime(df[col], errors='coerce')
-        # 2. Cortar la hora para dejar solo la fecha (Esto arregla el input)
-        df[col] = df[col].dt.date
+        # Convertir a datetime y quitar la hora
+        df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
 # -------------------------------------------------------------
 
 # --- SECCIÓN DE INDICADORES (Dashboard) ---
@@ -75,13 +74,12 @@ st.subheader("📝 Edición de Datos")
 st.info("Edita las celdas directamente y presiona 'Guardar Cambios' al final.")
 
 # El editor de datos mágico de Streamlit
-# num_rows="dynamic" permite agregar nuevas filas
 df_editado = st.data_editor(
     df,
     num_rows="dynamic",
     hide_index=True,
     column_config={
-        # --- CONFIGURACIÓN DE FECHAS (Formato Latino DD/MM/AAAA) ---
+        # --- CONFIGURACIÓN DE FECHAS (Calendarios) ---
         "fecha_elaboracion": st.column_config.DateColumn("Fecha Elaboración", format="DD/MM/YYYY", required=False),
         "fecha_formato": st.column_config.DateColumn("Fecha Formato", format="DD/MM/YYYY", required=False),
         "fecha_solicitud_modificacion": st.column_config.DateColumn("Fecha Sol. Modif.", format="DD/MM/YYYY", required=False),
@@ -89,21 +87,20 @@ df_editado = st.data_editor(
         "fecha_conciliacion": st.column_config.DateColumn("Fecha Conciliación", format="DD/MM/YYYY", required=False),
         "fecha_firma_ingenica": st.column_config.DateColumn("Firma Ingenica", format="DD/MM/YYYY", required=False),
         "fecha_entrega_final_ingenica_central": st.column_config.DateColumn("Entrega Final Central", format="DD/MM/YYYY", required=False),
-
-        # --- CONFIGURACIÓN FIRMA DNDS (Menú SI/NO) ---
-        "fecha_firma_dnds": st.column_config.SelectboxColumn(
-            "Firma DNDS",
-            options=["SI", "NO"],
+        
+        # --- FIRMA DNDS (VUELVE A SER FECHA) ---
+        "fecha_firma_dnds": st.column_config.DateColumn(
+            "Firma DNDS", 
+            format="DD/MM/YYYY", 
             required=False,
-            help="Selecciona SI o NO"
+            help="Si está vacía, se considera PENDIENTE"
         ),
 
-        # --- OTRAS COLUMNAS ---
+        # --- OTRAS CONFIGURACIONES ---
         "area": st.column_config.SelectboxColumn(
             "Área", 
             options=["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER", "CAMPAÑA"]
         ),
-        # Ocultamos columnas técnicas
         "id": st.column_config.Column(disabled=True),
         "created_at": st.column_config.Column(disabled=True),
     },
@@ -115,35 +112,33 @@ if st.button("Guardar Cambios en Supabase"):
         # 1. Preparar los datos
         datos_a_enviar = df_editado.copy()
 
-        # 2. CONVERSIÓN DE FECHAS (Corrección para el error "date is not JSON serializable")
-        # Definimos explícitamente qué columnas son fechas para convertirlas a texto simple
-        columnas_fechas = [
-            "fecha_elaboracion", 
-            "fecha_formato", 
-            "fecha_solicitud_modificacion", 
-            "fecha_entrega_post_modificacion", 
-            "fecha_conciliacion", 
-            "fecha_firma_ingenica",
-            "fecha_entrega_final_ingenica_central"
+        # 2. CONVERSIÓN DE FECHAS A TEXTO (Incluyendo Firma DNDS)
+        columnas_fechas_guardar = [
+            "fecha_elaboracion", "fecha_formato", "fecha_solicitud_modificacion", 
+            "fecha_entrega_post_modificacion", "fecha_conciliacion", 
+            "fecha_firma_ingenica", "fecha_entrega_final_ingenica_central",
+            "fecha_firma_dnds" # <--- Importante incluirla aquí
         ]
 
-        for col in columnas_fechas:
+        for col in columnas_fechas_guardar:
             if col in datos_a_enviar.columns:
-                # Convertimos a texto (YYYY-MM-DD)
                 datos_a_enviar[col] = datos_a_enviar[col].astype(str)
-                # Limpiamos los valores vacíos que quedan como texto 'nan', 'NaT' o 'None'
                 datos_a_enviar[col] = datos_a_enviar[col].replace(['nan', 'NaT', 'None', '<NA>'], None)
 
         # 3. Convertir a lista de diccionarios
         registros = datos_a_enviar.to_dict('records')
         
-        # 4. LIMPIEZA PARA FILAS NUEVAS (ID automático)
+        # 4. LIMPIEZA PARA FILAS NUEVAS (ESTO ARREGLA TU ERROR DE HOY)
         registros_limpios = []
         for reg in registros:
             nuevo_reg = reg.copy()
-            # Si el ID está vacío, lo borramos para que Supabase cree uno nuevo
+            
+            # --- LA CURA PARA EL ERROR "NULL VALUE IN ID" ---
+            # Si el ID está vacío, lo borramos del diccionario.
+            # Así Supabase sabe que es nuevo y le inventa un ID solo.
             if pd.isna(nuevo_reg.get('id')):
                 del nuevo_reg['id']
+            
             # Limpiamos created_at si es nuevo
             if pd.isna(nuevo_reg.get('created_at')):
                 if 'created_at' in nuevo_reg: del nuevo_reg['created_at']
@@ -153,13 +148,12 @@ if st.button("Guardar Cambios en Supabase"):
         # 5. Enviamos a Supabase
         response = supabase.table('prefacturas_pedidos').upsert(registros_limpios).execute()
         
-        # 6. Éxito
         st.success("¡Cambios guardados correctamente!")
         st.balloons()
 
     except Exception as e:
         st.error(f"Error al guardar: {e}")
-
+        
 # --- EXPORTAR DATOS ---
 st.divider()
 csv = df_editado.to_csv(index=False).encode('utf-8')
@@ -170,6 +164,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

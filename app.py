@@ -55,7 +55,7 @@ st.sidebar.header("🎯 Filtros de Gestión")
 # A. Filtro por Sector
 # Ordenamos los sectores y agregamos la opción "Todos"
 # --- 1. BARRA LATERAL DE FILTROS (SIDEBAR) ---
-st.sidebar.header("🎯 Filtros de Gestión")
+#st.sidebar.header("🎯 Filtros de Gestión")
 
 # VERIFICACIÓN DE SEGURIDAD
 if df.empty:
@@ -230,6 +230,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

@@ -103,75 +103,42 @@ st.divider()
 # --- 4. GRÁFICO DE BARRAS ---
 st.subheader("📊 Distribución de la Carga")
 
-if filtro_sector == "Todos":
-    # Si vemos todo, mostramos qué Sector tiene más trabajo
-    grafico_data = df_filtrado['Sector'].value_counts()
-    st.bar_chart(grafico_data)
-else:
-    # Si filtramos un sector, mostramos desglose por Subsector o Área
-    # (Si tienes columna 'Subsector' úsala, si no, usa 'Sector' o lo que prefieras)
-    if 'Subsector' in df_filtrado.columns:
-        grafico_data = df_filtrado['Subsector'].value_counts()
-    else:
-        grafico_data = df_filtrado['Sector'].value_counts()
-    st.bar_chart(grafico_data)
-
-# --- 5. TABLA DE EDICIÓN LIMPIA ---
+# --- 5. TABLA DE EDICIÓN LIMPIA Y CONFIGURADA ---
 st.subheader("📝 Gestión de Datos")
 
-# Configuración para ocultar columnas técnicas
+# Configuración MAESTRA (Une ocultar columnas + Calendarios)
 configuracion_columnas = {
-    "created_at": None,  # Ocultamos fecha creación
-    "id": None,          # Ocultamos ID
-    "Sector": {"disabled": True} # Opcional: Bloqueamos editar Sector
+    # A. Columnas Técnicas (Ocultas o Bloqueadas)
+    "created_at": None,   # Ocultamos fecha creación visualmente
+    "id": None,           # Ocultamos el ID visualmente
+    "Sector": {"disabled": True}, # Bloqueamos editar el Sector manual
+
+    # B. Configuración de Fechas (Para que salgan los Calendarios)
+    "fecha_elaboracion": st.column_config.DateColumn("Fecha Elaboración", format="DD/MM/YYYY"),
+    "fecha_formato": st.column_config.DateColumn("Fecha Formato", format="DD/MM/YYYY"),
+    "fecha_solicitud_modificacion": st.column_config.DateColumn("Fecha Sol. Modif.", format="DD/MM/YYYY"),
+    "fecha_entrega_post_modificacion": st.column_config.DateColumn("Fecha Entrega Post Modif.", format="DD/MM/YYYY"),
+    "fecha_conciliacion": st.column_config.DateColumn("Fecha Conciliación", format="DD/MM/YYYY"),
+    "fecha_firma_ingenica": st.column_config.DateColumn("Firma Ingenica", format="DD/MM/YYYY"),
+    "fecha_entrega_final_ingenica_central": st.column_config.DateColumn("Entrega Final Central", format="DD/MM/YYYY"),
+    "fecha_firma_dnds": st.column_config.DateColumn("Firma DNDS", format="DD/MM/YYYY", help="Si está vacía, se considera PENDIENTE"),
+    "fecha_edicion_pedido": st.column_config.DateColumn("Fecha Edición Pedido", format="DD/MM/YYYY"),
+
+    # C. Listas Desplegables
+    "area": st.column_config.SelectboxColumn(
+        "Área",
+        options=["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER", "CAMPAÑA", "PSSEN"]
+    )
 }
 
-# Mostramos la tabla filtrada
-edited_df = st.data_editor(
+# Mostramos la tabla y guardamos el resultado en 'df_editado'
+# IMPORTANTE: Usamos 'df_editado' para que coincida con tu botón de guardar de abajo
+df_editado = st.data_editor(
     df_filtrado,
     column_config=configuracion_columnas,
     use_container_width=True,
     num_rows="dynamic",
     key="editor_principal"
-)
-
-# Botón de guardar (Mantén tu lógica de guardado original debajo de esto si la tenías separada,
-# o usa el botón estándar del data_editor si ya lo configuramos antes).
-        # --- CONFIGURACIÓN DE FECHAS (Calendarios) ---
-        "fecha_elaboracion": st.column_config.DateColumn("Fecha Elaboración", format="DD/MM/YYYY", required=False),
-        "fecha_formato": st.column_config.DateColumn("Fecha Formato", format="DD/MM/YYYY", required=False),
-        "fecha_solicitud_modificacion": st.column_config.DateColumn("Fecha Sol. Modif.", format="DD/MM/YYYY", required=False),
-        "fecha_entrega_post_modificacion": st.column_config.DateColumn("Fecha Entrega Post Modif.", format="DD/MM/YYYY", required=False),
-        "fecha_conciliacion": st.column_config.DateColumn("Fecha Conciliación", format="DD/MM/YYYY", required=False),
-        "fecha_firma_ingenica": st.column_config.DateColumn("Firma Ingenica", format="DD/MM/YYYY", required=False),
-        "fecha_entrega_final_ingenica_central": st.column_config.DateColumn("Entrega Final Central", format="DD/MM/YYYY", required=False),
-        
-        # --- FIRMA DNDS (Calendario) ---
-        "fecha_firma_dnds": st.column_config.DateColumn(
-            "Firma DNDS", 
-            format="DD/MM/YYYY", 
-            required=False,
-            help="Si está vacía, se considera PENDIENTE"
-        ),
-
-        # --- ¡NUEVA COLUMNA CON CALENDARIO! ---
-        "fecha_edicion_pedido": st.column_config.DateColumn(
-            "Fecha Edición Pedido",
-            format="DD/MM/YYYY",
-            required=False
-        ),
-
-        # --- ÁREA (Ya lo tenías) ---
-        "area": st.column_config.SelectboxColumn(
-            "Área", 
-            options=["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER", "CAMPAÑA","PSSEN"]
-        ),
-
-        # --- COLUMNAS TÉCNICAS (Ocultas/Bloqueadas) ---
-        "id": st.column_config.Column(disabled=True, width="small"),
-        "created_at": st.column_config.Column(disabled=True, width="small"),
-    },
-    use_container_width=True
 )
 # --- Botón de Guardar (Versión Divide y Vencerás) ---
 if st.button("Guardar Cambios en Supabase"):
@@ -246,6 +213,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

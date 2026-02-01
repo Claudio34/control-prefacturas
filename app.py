@@ -57,7 +57,7 @@ if not df.empty:
     
     # Pendientes Elaborar: Contamos las que NO tienen fecha de firma dnds
     # (Usamos el nombre exacto que vi en tu linea 41: 'fecha_firma_dnds')
-    pendientes_elaborar = df['fecha_firma_dnds'].isnull().sum()
+    pendientes_elaborar = df['fecha_elaboracion'].isnull().sum()
     
     # Pendientes Conciliar: Contamos las que NO tienen fecha de conciliacion
     # (Usamos el nombre exacto que vi en tu linea 38: 'fecha_conciliacion')
@@ -228,6 +228,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

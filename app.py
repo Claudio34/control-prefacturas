@@ -64,8 +64,8 @@ if not df.empty:
     # Pedidos Recibidos: (Filas que SÍ tienen un número de pedido)
     # OJO: Cambia 'n_pedido' por el nombre real de tu columna en Supabase si es diferente
     # Usamos .notnull() porque aquí queremos contar los que YA existen.
-    if 'n_pedido' in df.columns:
-        pedidos_recibidos = df['n_pedido'].notnull().sum()
+    if 'pedido' in df.columns:
+        pedidos_recibidos = df['pedido'].notnull().sum()
     else:
         pedidos_recibidos = 0 # Para que no de error si no encuentra la columna
 
@@ -235,6 +235,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

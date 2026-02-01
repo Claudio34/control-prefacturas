@@ -50,32 +50,34 @@ for col in columnas_fechas:
 
 # --- SECCIÓN DE INDICADORES (Dashboard) ---
 if not df.empty:
-    st.header("Prefacturas") # Título
+    st.header("Prefacturas") 
 
     # 1. Cálculos
     total_prefacturas = len(df)
     
-    # Pendientes Elaborar: Contamos las que NO tienen fecha de firma dnds
-    # (Usamos el nombre exacto que vi en tu linea 41: 'fecha_firma_dnds')
+    # Pendientes Elaborar: (Vacíos en fecha_elaboracion)
     pendientes_elaborar = df['fecha_elaboracion'].isnull().sum()
     
-    # Pendientes Conciliar: Contamos las que NO tienen fecha de conciliacion
-    # (Usamos el nombre exacto que vi en tu linea 38: 'fecha_conciliacion')
+    # Pendientes Conciliar: (Vacíos en fecha_conciliacion)
     pendientes_conciliar = df['fecha_conciliacion'].isnull().sum()
 
-    # Pedidos recibidos: Contamos los registros de columna pedidos
-pedidos_recibidos = df['pedidos'].sum()
-    
+    # Pedidos Recibidos: (Filas que SÍ tienen un número de pedido)
+    # OJO: Cambia 'n_pedido' por el nombre real de tu columna en Supabase si es diferente
+    # Usamos .notnull() porque aquí queremos contar los que YA existen.
+    if 'n_pedido' in df.columns:
+        pedidos_recibidos = df['n_pedido'].notnull().sum()
+    else:
+        pedidos_recibidos = 0 # Para que no de error si no encuentra la columna
 
-    # 2. Visualización (Las 3 columnas)
+    # 2. Visualización (Ahora con 4 columnas)
     col1, col2, col3, col4 = st.columns(4)
 
     col1.metric("Total Prefacturas", total_prefacturas)
     col2.metric("Pendientes Elaborar", pendientes_elaborar)
     col3.metric("Pendientes Conciliar", pendientes_conciliar)
-    col4.metric("Pedidos Recibidos",pedido)
+    col4.metric("Pedidos Recibidos", pedidos_recibidos)
 
-    st.divider() # Línea de separación
+    st.divider()
 
 # --- SECCIÓN DE EDICIÓN ---
 st.subheader("📝 Edición de Datos")
@@ -233,6 +235,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

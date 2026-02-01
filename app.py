@@ -144,7 +144,7 @@ df_editado = st.data_editor(
         # --- ÁREA (Ya lo tenías) ---
         "area": st.column_config.SelectboxColumn(
             "Área", 
-            options=["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER", "CAMPAÑA"]
+            options=["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER", "CAMPAÑA","PSSEN"]
         ),
 
         # --- COLUMNAS TÉCNICAS (Ocultas/Bloqueadas) ---
@@ -226,6 +226,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

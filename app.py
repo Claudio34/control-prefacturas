@@ -50,25 +50,27 @@ for col in columnas_fechas:
 
 # --- SECCIÓN DE INDICADORES (Dashboard) ---
 if not df.empty:
-    col1, col2, col3 = st.columns(3)
-    
-    # KPI 1: Total de pedidos
-    col1.metric("Total Registros", len(df))
-    
-    # KPI 2: Pendientes de Firma DNDS (donde la fecha es nula)
-    # Asumiendo que 'fecha_firma_dnds' es el nombre exacto de la columna
-    pendientes_dnds = df['fecha_firma_dnds'].isnull().sum()
-    col2.metric("Pendientes Firma DNDS", pendientes_dnds, delta_color="inverse")
-    
-    # KPI 3: Entregados este mes (Ejemplo)
-    # Convertir a datetime si no lo está
-    if 'fecha_elaboracion' in df.columns:
-        df['fecha_elaboracion'] = pd.to_datetime(df['fecha_elaboracion'])
-        mes_actual = datetime.now().month
-        entregas_mes = df[df['fecha_elaboracion'].dt.month == mes_actual].shape[0]
-        col3.metric(f"Elaborados este Mes ({mes_actual})", entregas_mes)
+    st.header("Prefacturas") # Título
 
-st.divider()
+    # 1. Cálculos
+    total_prefacturas = len(df)
+    
+    # Pendientes Elaborar: Contamos las que NO tienen fecha de firma dnds
+    # (Usamos el nombre exacto que vi en tu linea 41: 'fecha_firma_dnds')
+    pendientes_elaborar = df['fecha_firma_dnds'].isnull().sum()
+    
+    # Pendientes Conciliar: Contamos las que NO tienen fecha de conciliacion
+    # (Usamos el nombre exacto que vi en tu linea 38: 'fecha_conciliacion')
+    pendientes_conciliar = df['fecha_conciliacion'].isnull().sum()
+
+    # 2. Visualización (Las 3 columnas)
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Total Prefacturas", total_prefacturas)
+    col2.metric("Pendientes Elaborar", pendientes_elaborar)
+    col3.metric("Pendientes Conciliar", pendientes_conciliar)
+
+    st.divider() # Línea de separación
 
 # --- SECCIÓN DE EDICIÓN ---
 st.subheader("📝 Edición de Datos")
@@ -226,6 +228,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

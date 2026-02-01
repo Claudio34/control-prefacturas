@@ -54,9 +54,26 @@ st.sidebar.header("🎯 Filtros de Gestión")
 
 # A. Filtro por Sector
 # Ordenamos los sectores y agregamos la opción "Todos"
-lista_sectores = ["Todos"] + sorted(df['Sector'].unique().tolist())
-filtro_sector = st.sidebar.selectbox("Seleccionar Sector:", lista_sectores)
+# --- 1. BARRA LATERAL DE FILTROS (SIDEBAR) ---
+st.sidebar.header("🎯 Filtros de Gestión")
 
+# VERIFICACIÓN DE SEGURIDAD
+if df.empty:
+    st.warning("⚠️ No se han cargado datos. Revisa tu conexión a Supabase.")
+    st.stop() # Detiene la app aquí para que no de error
+
+# A. Filtro por Sector (Intentamos buscar 'Sector' o 'sector')
+if 'Sector' in df.columns:
+    col_sector = 'Sector'
+elif 'sector' in df.columns:
+    col_sector = 'sector'
+else:
+    st.error("❌ No encuentro la columna de Sector. Tus columnas son: " + str(df.columns.tolist()))
+    st.stop()
+
+# Usamos la columna detectada (col_sector) en lugar del nombre fijo
+lista_sectores = ["Todos"] + sorted(df[col_sector].unique().tolist())
+filtro_sector = st.sidebar.selectbox("Seleccionar Sector:", lista_sectores)
 # B. Filtro Rápido de Estado
 filtro_estado = st.sidebar.radio(
     "Mostrar solo:",
@@ -213,6 +230,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

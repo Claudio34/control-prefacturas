@@ -68,7 +68,7 @@ pedidos_recibidos = df['pedidos'].sum()
     
 
     # 2. Visualización (Las 3 columnas)
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
     col1.metric("Total Prefacturas", total_prefacturas)
     col2.metric("Pendientes Elaborar", pendientes_elaborar)
@@ -233,6 +233,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

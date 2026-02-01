@@ -63,12 +63,17 @@ if not df.empty:
     # (Usamos el nombre exacto que vi en tu linea 38: 'fecha_conciliacion')
     pendientes_conciliar = df['fecha_conciliacion'].isnull().sum()
 
+    # Pedidos recibidos: Contamos los registros de columna pedidos
+pedidos_recibidos = df['pedidos'].sum()
+    
+
     # 2. Visualización (Las 3 columnas)
     col1, col2, col3 = st.columns(3)
 
     col1.metric("Total Prefacturas", total_prefacturas)
     col2.metric("Pendientes Elaborar", pendientes_elaborar)
     col3.metric("Pendientes Conciliar", pendientes_conciliar)
+    col4.metric("Pedidos Recibidos",pedido)
 
     st.divider() # Línea de separación
 
@@ -228,6 +233,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

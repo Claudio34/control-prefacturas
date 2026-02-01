@@ -48,84 +48,95 @@ for col in columnas_fechas:
         df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
 # -------------------------------------------------------------
 
-# --- SECCIÓN DE INDICADORES (Dashboard) ---
-if not df.empty:
-    st.header("Prefacturas") 
+# --- 1. BARRA LATERAL DE FILTROS (SIDEBAR) ---
+# Esto crea el menú a la izquierda
+st.sidebar.header("🎯 Filtros de Gestión")
 
-    # 1. Cálculos
-    total_prefacturas = len(df)
-    
-    # Pendientes Elaborar: (Vacíos en fecha_elaboracion)
-    pendientes_elaborar = df['fecha_elaboracion'].isnull().sum()
-    
-    # Pendientes Conciliar: (Vacíos en fecha_conciliacion)
-    pendientes_conciliar = df['fecha_conciliacion'].isnull().sum()
+# A. Filtro por Sector
+# Ordenamos los sectores y agregamos la opción "Todos"
+lista_sectores = ["Todos"] + sorted(df['Sector'].unique().tolist())
+filtro_sector = st.sidebar.selectbox("Seleccionar Sector:", lista_sectores)
 
-    # Pedidos Recibidos: (Filas que SÍ tienen un número de pedido)
-    # OJO: Cambia 'n_pedido' por el nombre real de tu columna en Supabase si es diferente
-    # Usamos .notnull() porque aquí queremos contar los que YA existen.
-    if 'pedido' in df.columns:
-        pedidos_recibidos = df['pedido'].notnull().sum()
+# B. Filtro Rápido de Estado
+filtro_estado = st.sidebar.radio(
+    "Mostrar solo:",
+    ["Ver Todo", "Pendientes de Elaborar", "Pendientes de Conciliar"]
+)
+
+# --- 2. APLICACIÓN DE FILTROS ---
+# Creamos una copia de los datos para filtrar sin perder los originales
+df_filtrado = df.copy()
+
+# Filtro de Sector
+if filtro_sector != "Todos":
+    df_filtrado = df_filtrado[df_filtrado['Sector'] == filtro_sector]
+
+# Filtro de Estado (Lógica corregida según tus indicaciones)
+if filtro_estado == "Pendientes de Elaborar":
+    df_filtrado = df_filtrado[df_filtrado['fecha_elaboracion'].isnull()]
+elif filtro_estado == "Pendientes de Conciliar":
+    df_filtrado = df_filtrado[df_filtrado['fecha_conciliacion'].isnull()]
+
+# --- 3. INDICADORES DINÁMICOS (KPIs) ---
+st.header(f"Tablero de Control: {filtro_sector}")
+
+# Calculamos los números basándonos en los datos YA filtrados
+kpi_total = len(df_filtrado)
+kpi_elaborar = df_filtrado['fecha_elaboracion'].isnull().sum()
+kpi_conciliar = df_filtrado['fecha_conciliacion'].isnull().sum()
+
+# Validación para la columna de pedidos (usando el nombre 'pedido' que vi en tu foto)
+if 'pedido' in df_filtrado.columns:
+    kpi_pedidos = df_filtrado['pedido'].notnull().sum()
+else:
+    kpi_pedidos = 0
+
+# Mostramos los 4 indicadores
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Total Vista Actual", kpi_total)
+col2.metric("Falta Elaborar", kpi_elaborar)
+col3.metric("Falta Conciliar", kpi_conciliar)
+col4.metric("Pedidos Listos", kpi_pedidos)
+
+st.divider()
+
+# --- 4. GRÁFICO DE BARRAS ---
+st.subheader("📊 Distribución de la Carga")
+
+if filtro_sector == "Todos":
+    # Si vemos todo, mostramos qué Sector tiene más trabajo
+    grafico_data = df_filtrado['Sector'].value_counts()
+    st.bar_chart(grafico_data)
+else:
+    # Si filtramos un sector, mostramos desglose por Subsector o Área
+    # (Si tienes columna 'Subsector' úsala, si no, usa 'Sector' o lo que prefieras)
+    if 'Subsector' in df_filtrado.columns:
+        grafico_data = df_filtrado['Subsector'].value_counts()
     else:
-        pedidos_recibidos = 0 # Para que no de error si no encuentra la columna
+        grafico_data = df_filtrado['Sector'].value_counts()
+    st.bar_chart(grafico_data)
 
-    # 2. Visualización (Ahora con 4 columnas)
-    col1, col2, col3, col4 = st.columns(4)
+# --- 5. TABLA DE EDICIÓN LIMPIA ---
+st.subheader("📝 Gestión de Datos")
 
-    col1.metric("Total Prefacturas", total_prefacturas)
-    col2.metric("Pendientes Elaborar", pendientes_elaborar)
-    col3.metric("Pendientes Conciliar", pendientes_conciliar)
-    col4.metric("Pedidos Recibidos", pedidos_recibidos)
+# Configuración para ocultar columnas técnicas
+configuracion_columnas = {
+    "created_at": None,  # Ocultamos fecha creación
+    "id": None,          # Ocultamos ID
+    "Sector": {"disabled": True} # Opcional: Bloqueamos editar Sector
+}
 
-    st.divider()
-
-# --- SECCIÓN DE EDICIÓN ---
-st.subheader("📝 Edición de Datos")
-st.info("Edita las celdas directamente y presiona 'Guardar Cambios' al final.")
-
-# El editor de datos mágico de Streamlit
-df_editado = st.data_editor(
-    df,
+# Mostramos la tabla filtrada
+edited_df = st.data_editor(
+    df_filtrado,
+    column_config=configuracion_columnas,
+    use_container_width=True,
     num_rows="dynamic",
-    hide_index=True,
-    column_config={
-        # --- 01. SECTOR (Combobox) ---
-        "sector": st.column_config.SelectboxColumn(
-            "Sector",
-            options=["MANAGUA", "NORTE", "OCCIDENTE", "ORIENTE", "SUR"],
-            required=False,
-            width="medium"
-        ),
+    key="editor_principal"
+)
 
-        # --- 02. SUBSECTOR (Combobox) ---
-        "subsector": st.column_config.SelectboxColumn(
-            "Subsector",
-            options=["MANAGUA DS", "MANAGUA DN", "NORTE", "OCCIDENTE", "ORIENTE", "SUR"],
-            required=False,
-            width="medium"
-        ),
-
-        # --- 03. PERIODO (Combobox con 1Q y 2Q) ---
-        "periodo": st.column_config.SelectboxColumn(
-            "Periodo",
-            options=[
-                "ENERO 1Q", "ENERO 2Q", 
-                "FEBRERO 1Q", "FEBRERO 2Q", 
-                "MARZO 1Q", "MARZO 2Q",
-                "ABRIL 1Q", "ABRIL 2Q", 
-                "MAYO 1Q", "MAYO 2Q", 
-                "JUNIO 1Q", "JUNIO 2Q",
-                "JULIO 1Q", "JULIO 2Q", 
-                "AGOSTO 1Q", "AGOSTO 2Q", 
-                "SEPTIEMBRE 1Q", "SEPTIEMBRE 2Q",
-                "OCTUBRE 1Q", "OCTUBRE 2Q", 
-                "NOVIEMBRE 1Q", "NOVIEMBRE 2Q", 
-                "DICIEMBRE 1Q", "DICIEMBRE 2Q"
-            ],
-            required=False,
-            width="medium"
-        ),
-
+# Botón de guardar (Mantén tu lógica de guardado original debajo de esto si la tenías separada,
+# o usa el botón estándar del data_editor si ya lo configuramos antes).
         # --- CONFIGURACIÓN DE FECHAS (Calendarios) ---
         "fecha_elaboracion": st.column_config.DateColumn("Fecha Elaboración", format="DD/MM/YYYY", required=False),
         "fecha_formato": st.column_config.DateColumn("Fecha Formato", format="DD/MM/YYYY", required=False),
@@ -235,6 +246,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

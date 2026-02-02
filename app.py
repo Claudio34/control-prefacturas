@@ -123,9 +123,12 @@ def etapa_excluyente(df_in: pd.DataFrame) -> pd.Series:
     return pd.Series(np.select(conds, etapas, default="Sin clasificar"), index=df_in.index)
 
 # --- 1) df_base: solo filtro de sector (KPIs + gráficos) ---
-df_base = df.copy()
+# df_sector: SOLO filtro de sector
+df_sector = df.copy()
+
 if filtro_sector != "Todos":
-    df_base = df_base[df_base['sector'] == filtro_sector]
+    df_sector = df_sector[df_sector["sector"] == filtro_sector]
+
 
 # --- 2) df_filtrado: df_base + filtro de estado (tabla) ---
 #df_filtrado = df_base.copy()
@@ -336,13 +339,10 @@ configuracion_columnas = {
     )
 }
 
-df_editado = st.data_editor(
-    df_filtrado,
-    column_config=configuracion_columnas,
-    use_container_width=True,
-    num_rows="dynamic",
-    key="editor_principal"
-)
+df_vista = aplicar_filtro_estado(df_sector, filtro_estado)   # sector + estado
+df_tablero = df_vista                                       # KPIs + gráfico
+df_filtrado = df_vista                                      # tabla
+
 
 # --- Guardar Cambios ---
 if st.button("Guardar Cambios en Supabase"):
@@ -404,6 +404,7 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
 
 
 

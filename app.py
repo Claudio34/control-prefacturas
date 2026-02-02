@@ -239,50 +239,74 @@ st.divider()
 
 # --- Gráfico apilado por etapa (usa df_base para no distorsionar por filtro de estado) ---
 st.subheader("📊 Distribución de la Carga (por etapa)")
+import altair as alt
+import numpy as np
 
-# categoría: si Todos -> sector, si sector específico -> subsector (si existe)
-col_categoria = 'sector'
-etiqueta = 'Sector'
-if filtro_sector != "Todos":
-    if 'subsector' in df_base.columns:
-        col_categoria = 'subsector'
-        etiqueta = 'Subsector'
-
+# IMPORTANTE: usar df_base (solo filtro de sector), NO df_filtrado
 df_g = df_base.copy()
-df_g['Etapa'] = etapa_excluyente(df_g)
-df_g['Categoria'] = df_g[col_categoria].fillna("Sin dato") if col_categoria in df_g.columns else "Sin dato"
 
+# 1) Si hay sector seleccionado => SIEMPRE por subsector
+col_categoria = 'subsector' if (filtro_sector != "Todos" and 'subsector' in df_g.columns) else 'sector'
+etiqueta = 'Subsector' if col_categoria == 'subsector' else 'Sector'
+
+# 2) Pedido lleno/vacío robusto
+if 'pedido' in df_g.columns:
+    pedido_lleno = df_g['pedido'].fillna('').astype(str).str.strip().ne('')
+else:
+    pedido_lleno = pd.Series([False] * len(df_g), index=df_g.index)
+
+# 3) Etapas excluyentes (con nombres claros)
+etapas = ["1. Por elaborar", "2. Por conciliar", "3. Pendiente de pedido", "4. Pedido recibido"]
+conds = [
+    df_g['fecha_elaboracion'].isnull(),
+    df_g['fecha_elaboracion'].notnull() & df_g['fecha_conciliacion'].isnull(),
+    df_g['fecha_conciliacion'].notnull() & (~pedido_lleno),
+    df_g['fecha_conciliacion'].notnull() & (pedido_lleno),
+]
+df_g['Etapa'] = np.select(conds, etapas, default="Sin clasificar")
+
+# 4) Categoría limpia (y fallback: si subsector vacío, usa sector)
+cat = df_g[col_categoria].fillna('').astype(str).str.strip() if col_categoria in df_g.columns else pd.Series(['']*len(df_g))
+if col_categoria == 'subsector':
+    cat_sector = df_g['sector'].fillna('Sin dato').astype(str).str.strip()
+    df_g['Categoria'] = np.where(cat.ne(''), cat, cat_sector)
+else:
+    df_g['Categoria'] = np.where(cat.ne(''), cat, 'Sin dato')
+
+# 5) Resumen agregado
 resumen = (
-    df_g.groupby(['Categoria', 'Etapa'])
+    df_g.groupby(['Categoria', 'Etapa'], as_index=False)
         .size()
-        .reset_index(name='Cantidad')
+        .rename(columns={'size': 'Cantidad'})
 )
 
-tot_cat = resumen.groupby('Categoria')['Cantidad'].sum().reset_index(name='TotalCategoria')
+# Total por categoría para ordenar
+tot_cat = resumen.groupby('Categoria', as_index=False)['Cantidad'].sum().rename(columns={'Cantidad': 'TotalCategoria'})
 resumen = resumen.merge(tot_cat, on='Categoria', how='left')
-resumen['PorcCategoria'] = resumen['Cantidad'] / resumen['TotalCategoria']
 
-orden_etapas = ["1. Elaborar", "2. Conciliar", "3. Pendiente de pedido", "4. Pedido recibido", "Sin clasificar"]
+orden_etapas = etapas + (["Sin clasificar"] if (resumen['Etapa'] == "Sin clasificar").any() else [])
 
-chart = (
-    alt.Chart(resumen)
-    .mark_bar(cornerRadius=6, stroke='rgba(0,0,0,0.25)', strokeWidth=1)
-    .encode(
-        y=alt.Y('Categoria:N', sort='-x', title=etiqueta),
-        x=alt.X('sum(Cantidad):Q', title='Nº Prefacturas'),
-        color=alt.Color('Etapa:N', sort=orden_etapas, title='Etapa'),
-        tooltip=[
-            alt.Tooltip('Categoria:N', title=etiqueta),
-            alt.Tooltip('Etapa:N', title='Etapa'),
-            alt.Tooltip('Cantidad:Q', title='Cantidad'),
-            alt.Tooltip('PorcCategoria:Q', title='% en categoría', format='.1%'),
-            alt.Tooltip('TotalCategoria:Q', title='Total categoría')
-        ]
-    )
-    .properties(height=min(520, 60 + 28 * resumen['Categoria'].nunique()))
+# 6) Altura mínima + barras gruesas + etiquetas
+h = max(260, min(520, 60 + 30 * resumen['Categoria'].nunique()))
+
+base = alt.Chart(resumen).encode(
+    y=alt.Y('Categoria:N', sort=alt.SortField(field='TotalCategoria', order='descending'), title=etiqueta),
+    x=alt.X('Cantidad:Q', stack='zero', title='Nº Prefacturas'),
+    color=alt.Color('Etapa:N', sort=orden_etapas, title='Etapa'),
+    tooltip=['Categoria:N', 'Etapa:N', 'Cantidad:Q', 'TotalCategoria:Q']
 )
 
-st.altair_chart(chart, use_container_width=True)
+barras = base.mark_bar(size=26, cornerRadius=6, stroke='rgba(0,0,0,0.25)', strokeWidth=1)
+
+labels = base.transform_filter(
+    alt.datum.Cantidad > 0
+).mark_text(
+    align='left', baseline='middle', dx=6, fontSize=12
+).encode(
+    text='Cantidad:Q'
+)
+
+st.altair_chart((barras + labels).properties(height=h), use_container_width=True)
 
 # --- Tabla ---
 st.subheader("📝 Gestión de Datos")
@@ -380,6 +404,7 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
 
 
 

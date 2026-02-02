@@ -117,7 +117,7 @@ col4.metric("Pedidos Listos", kpi_pedidos)
 
 st.divider()
 
-# --- 4. GRÁFICO DE BARRAS PRO (CORREGIDO) ---
+# --- 4. GRÁFICO DE BARRAS PRO (CON BORDES) ---
 st.subheader("📊 Distribución de la Carga")
 import altair as alt
 
@@ -151,11 +151,13 @@ try:
             tooltip=['Categoria', 'Cantidad']
         )
 
-        # CORRECCIÓN AQUÍ: Usamos TopLeft y TopRight por separado
+        # CORRECCIÓN AQUÍ: Añadimos borde negro
         barras = base.mark_bar(
-            size=65, 
+            size=60, 
             cornerRadiusTopLeft=5, 
-            cornerRadiusTopRight=5
+            cornerRadiusTopRight=5,
+            stroke='black',       # <--- Color del borde
+            strokeWidth=1         # <--- Grosor del borde
         )
 
         textos = base.mark_text(
@@ -293,6 +295,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

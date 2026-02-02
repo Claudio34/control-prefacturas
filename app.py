@@ -97,23 +97,23 @@ elif filtro_estado == "Pendientes de Conciliar":
 # --- 3. INDICADORES DINÁMICOS (KPIs) ---
 st.header(f"Tablero de Control: {filtro_sector}")
 
-# Calculamos los números basándonos en los datos YA filtrados
+# Cálculos (se mantienen igual)
 kpi_total = len(df_filtrado)
 kpi_elaborar = df_filtrado['fecha_elaboracion'].isnull().sum()
 kpi_conciliar = df_filtrado['fecha_conciliacion'].isnull().sum()
 
-# Validación para la columna de pedidos (usando el nombre 'pedido' que vi en tu foto)
 if 'pedido' in df_filtrado.columns:
     kpi_pedidos = df_filtrado['pedido'].notnull().sum()
 else:
     kpi_pedidos = 0
 
-# Mostramos los 4 indicadores
+# Visualización (Textos actualizados según tu imagen)
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Total Vista Actual", kpi_total)
-col2.metric("Falta Elaborar", kpi_elaborar)
-col3.metric("Falta Conciliar", kpi_conciliar)
-col4.metric("Pedidos Listos", kpi_pedidos)
+
+col1.metric("Total Prefacturas", kpi_total)          # Antes: Total Vista Actual
+col2.metric("Prefacturas por Elaborar", kpi_elaborar)# Antes: Falta Elaborar
+col3.metric("Prefacturas por Conciliar", kpi_conciliar) # Antes: Falta Conciliar
+col4.metric("Pedidos Recibidos", kpi_pedidos)        # Antes: Pedidos Listos
 
 st.divider()
 
@@ -295,6 +295,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

@@ -187,62 +187,90 @@ st.markdown(f"""
 st.divider()
 
 
-st.subheader("📊 Distribución de la Carga")
+st.subheader("📊 Distribución de la Carga (por etapa)")
 import altair as alt
+import numpy as np
 
 try:
-    columna_grafico = col_sector
-    etiqueta_eje = 'Sector'
+    # 1) Definir columna categoría: Sector (si "Todos") o Subsector (si filtraste un sector)
+    col_categoria = col_sector
+    etiqueta = "Sector"
 
     if filtro_sector != "Todos":
         if 'subsector' in df_filtrado.columns:
-            columna_grafico = 'subsector'
-            etiqueta_eje = 'Subsector'
+            col_categoria = 'subsector'
+            etiqueta = 'Subsector'
         elif 'Subsector' in df_filtrado.columns:
-            columna_grafico = 'Subsector'
-            etiqueta_eje = 'Subsector'
+            col_categoria = 'Subsector'
+            etiqueta = 'Subsector'
 
-    if columna_grafico in df_filtrado.columns:
-        datos_grafico = df_filtrado[columna_grafico].value_counts().reset_index()
-        datos_grafico.columns = ['Categoria', 'Cantidad']
-        total_local = int(datos_grafico['Cantidad'].sum())
-        datos_grafico['Porcentaje'] = (datos_grafico['Cantidad'] / total_local) if total_local else 0
+    if col_categoria not in df_filtrado.columns:
+        st.warning(f"No encuentro la columna '{col_categoria}' para graficar.")
+        st.stop()
+
+    # 2) Crear la etapa (EXCLUYENTE) por fila
+    df_g = df_filtrado.copy()
+
+    # pedido lleno/vacío robusto (None, "", "   ")
+    if 'pedido' in df_g.columns:
+        pedido_lleno = df_g['pedido'].fillna('').astype(str).str.strip().ne('')
     else:
-        st.warning(f"No encuentro la columna '{columna_grafico}' para graficar.")
-        datos_grafico = None
+        pedido_lleno = pd.Series([False] * len(df_g), index=df_g.index)
 
-    if datos_grafico is not None and not datos_grafico.empty:
+    conds = [
+        df_g['fecha_elaboracion'].isnull(),
+        df_g['fecha_elaboracion'].notnull() & df_g['fecha_conciliacion'].isnull(),
+        df_g['fecha_conciliacion'].notnull() & (~pedido_lleno),
+        df_g['fecha_conciliacion'].notnull() & (pedido_lleno),
+    ]
+    etapas = [
+        "1. Elaborar",
+        "2. Conciliar",
+        "3. Pendiente de pedido",
+        "4. Pedido recibido",
+    ]
+    df_g['Etapa'] = np.select(conds, etapas, default="Sin clasificar")
+    df_g['Categoria'] = df_g[col_categoria].fillna("Sin dato")
 
-        base = alt.Chart(datos_grafico).encode(
-            y=alt.Y('Categoria:N', sort='-x', title=etiqueta_eje),
-            x=alt.X('Cantidad:Q', title='Nº Prefacturas'),
+    # 3) Resumen para apilado
+    resumen = (
+        df_g.groupby(['Categoria', 'Etapa'])
+            .size()
+            .reset_index(name='Cantidad')
+    )
+
+    # % dentro de cada categoría (para tooltip)
+    tot_cat = resumen.groupby('Categoria')['Cantidad'].sum().reset_index(name='TotalCategoria')
+    resumen = resumen.merge(tot_cat, on='Categoria', how='left')
+    resumen['PorcCategoria'] = resumen['Cantidad'] / resumen['TotalCategoria']
+
+    # Orden de etapas (para que el stack siga el ciclo)
+    orden_etapas = etapas + (["Sin clasificar"] if (resumen['Etapa'] == "Sin clasificar").any() else [])
+
+    # 4) Gráfico apilado horizontal
+    chart = (
+        alt.Chart(resumen)
+        .mark_bar(cornerRadius=6, stroke='rgba(0,0,0,0.25)', strokeWidth=1)
+        .encode(
+            y=alt.Y('Categoria:N', sort='-x', title=etiqueta),
+            x=alt.X('sum(Cantidad):Q', title='Nº Prefacturas'),
+            color=alt.Color('Etapa:N', sort=orden_etapas, title='Etapa'),
             tooltip=[
-                alt.Tooltip('Categoria:N', title=etiqueta_eje),
+                alt.Tooltip('Categoria:N', title=etiqueta),
+                alt.Tooltip('Etapa:N', title='Etapa'),
                 alt.Tooltip('Cantidad:Q', title='Cantidad'),
-                alt.Tooltip('Porcentaje:Q', title='%', format='.1%')
+                alt.Tooltip('PorcCategoria:Q', title='% en categoría', format='.1%'),
+                alt.Tooltip('TotalCategoria:Q', title='Total categoría')
             ]
         )
+        .properties(height=min(520, 60 + 28 * resumen['Categoria'].nunique()))
+    )
 
-        barras = base.mark_bar(
-            cornerRadius=6,
-            stroke='rgba(0,0,0,0.35)',
-            strokeWidth=1
-        )
-
-        textos = base.mark_text(
-            align='left',
-            baseline='middle',
-            dx=6,
-            fontSize=12
-        ).encode(text='Cantidad:Q')
-
-        st.altair_chart((barras + textos).properties(height=320), use_container_width=True)
-
-    else:
-        st.info("No hay datos para mostrar en el gráfico con los filtros actuales.")
+    st.altair_chart(chart, use_container_width=True)
 
 except Exception as e:
-    st.error(f"Error al generar el gráfico: {e}")
+    st.error(f"Error al generar el gráfico apilado: {e}")
+
 
     
 # --- 5. TABLA DE EDICIÓN LIMPIA Y CONFIGURADA ---
@@ -362,6 +390,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

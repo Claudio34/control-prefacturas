@@ -5,10 +5,14 @@ from datetime import datetime
 import altair as alt
 import numpy as np
 
-# 1. Configuración de la página (Debe ser lo primero)
+# =========================
+# 1) PAGE CONFIG
+# =========================
 st.set_page_config(page_title="PREFACTURAS", layout="wide")
 
-# 2. Conexión a Supabase (Usa st.secrets en producción)
+# =========================
+# 2) SUPABASE CONNECTION
+# =========================
 URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 
@@ -18,7 +22,9 @@ def init_connection():
 
 supabase = init_connection()
 
-# 3. Título
+# =========================
+# 3) UI HEADER
+# =========================
 st.title("⚡ PREFACTURAS")
 st.caption(f"Última actualización: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
@@ -43,21 +49,20 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Función para cargar datos
+# =========================
+# 4) LOAD DATA
+# =========================
 def cargar_datos():
     response = supabase.table('prefacturas_pedidos').select("*").order('id').execute()
-    df_local = pd.DataFrame(response.data)
-    return df_local
+    return pd.DataFrame(response.data)
 
 df = cargar_datos()
 
-# VERIFICACIÓN DE SEGURIDAD
 if df.empty:
     st.warning("⚠️ No se han cargado datos. Revisa tu conexión a Supabase.")
     st.stop()
 
-# --- Normalización de nombres de columnas (por si vienen con mayúsculas) ---
-# Esto evita inconsistencias y te simplifica todo el código.
+# --- Normalizar nombres de columnas ---
 rename_map = {}
 if 'Sector' in df.columns and 'sector' not in df.columns:
     rename_map['Sector'] = 'sector'
@@ -65,6 +70,11 @@ if 'Subsector' in df.columns and 'subsector' not in df.columns:
     rename_map['Subsector'] = 'subsector'
 if rename_map:
     df = df.rename(columns=rename_map)
+
+# --- Validaciones mínimas ---
+if 'sector' not in df.columns:
+    st.error("❌ No encuentro la columna 'sector'. Columnas detectadas: " + str(df.columns.tolist()))
+    st.stop()
 
 # --- Convertir texto a fechas reales ---
 columnas_fechas = [
@@ -82,31 +92,58 @@ for col in columnas_fechas:
     if col in df.columns:
         df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
 
-# --- Sidebar de filtros ---
-st.sidebar.header("🎯 Filtros de Gestión")
-
-# Validar columna sector ya normalizada
-if 'sector' not in df.columns:
-    st.error("❌ No encuentro la columna 'sector' en los datos. Columnas detectadas: " + str(df.columns.tolist()))
-    st.stop()
-
-lista_sectores = ["Todos"] + sorted(df['sector'].dropna().unique().tolist())
-filtro_sector = st.sidebar.selectbox("Seleccionar Sector:", lista_sectores)
-
-#filtro_estado = st.sidebar.radio(
-#    "Mostrar solo:",
-#    ["Ver Todo", "Pendientes de Elaborar", "Pendientes de Conciliar", "Pendientes de Pedido", "Pedidos Recibidos"]
-#)
-
-# --- Helpers de ciclo (pedido lleno / vacío robusto) ---
+# =========================
+# 5) HELPERS (CYCLE LOGIC)
+# =========================
 def serie_pedido_lleno(df_in: pd.DataFrame) -> pd.Series:
+    """True si pedido NO está vacío (maneja None, '', '   ')."""
     if 'pedido' not in df_in.columns:
         return pd.Series([False] * len(df_in), index=df_in.index)
     return df_in['pedido'].fillna('').astype(str).str.strip().ne('')
 
-def etapa_excluyente(df_in: pd.DataFrame) -> pd.Series:
-    """Devuelve una etapa por fila (excluyente) según tu ciclo."""
+def aplicar_filtro_estado(df_in: pd.DataFrame, estado: str) -> pd.DataFrame:
+    """Filtra el dataframe según el estado seleccionado del ciclo."""
+    if estado == "Ver Todo":
+        return df_in
+
+    # Si faltan columnas críticas, no filtre y avise
+    for c in ["fecha_elaboracion", "fecha_conciliacion"]:
+        if c not in df_in.columns:
+            st.warning(f"⚠️ Falta la columna '{c}'. No se aplicó el filtro de estado.")
+            return df_in
+
     pedido_lleno = serie_pedido_lleno(df_in)
+
+    if estado == "Pendientes de Elaborar":
+        return df_in[df_in['fecha_elaboracion'].isnull()]
+
+    if estado == "Pendientes de Conciliar":
+        return df_in[
+            df_in['fecha_elaboracion'].notnull() &
+            df_in['fecha_conciliacion'].isnull()
+        ]
+
+    if estado == "Pendientes de Pedido":
+        return df_in[
+            df_in['fecha_conciliacion'].notnull() &
+            (~pedido_lleno)
+        ]
+
+    if estado == "Pedidos Recibidos":
+        return df_in[
+            df_in['fecha_conciliacion'].notnull() &
+            (pedido_lleno)
+        ]
+
+    return df_in
+
+def etapa_excluyente(df_in: pd.DataFrame) -> pd.Series:
+    """Devuelve etapa por fila (excluyente) según ciclo."""
+    pedido_lleno = serie_pedido_lleno(df_in)
+
+    # Si faltan columnas, no romper
+    if 'fecha_elaboracion' not in df_in.columns or 'fecha_conciliacion' not in df_in.columns:
+        return pd.Series(["Sin clasificar"] * len(df_in), index=df_in.index)
 
     conds = [
         df_in['fecha_elaboracion'].isnull(),
@@ -122,67 +159,72 @@ def etapa_excluyente(df_in: pd.DataFrame) -> pd.Series:
     ]
     return pd.Series(np.select(conds, etapas, default="Sin clasificar"), index=df_in.index)
 
-# --- 1) df_base: solo filtro de sector (KPIs + gráficos) ---
+# =========================
+# 6) SIDEBAR FILTERS
+# =========================
+st.sidebar.header("🎯 Filtros de Gestión")
+
+lista_sectores = ["Todos"] + sorted(df['sector'].dropna().unique().tolist())
+filtro_sector = st.sidebar.selectbox("Seleccionar Sector:", lista_sectores)
+
+filtro_estado = st.sidebar.radio(
+    "Mostrar solo:",
+    ["Ver Todo", "Pendientes de Elaborar", "Pendientes de Conciliar", "Pendientes de Pedido", "Pedidos Recibidos"]
+)
+
+# =========================
+# 7) DATASETS (IMPORTANT!)
+# =========================
 # df_sector: SOLO filtro de sector
 df_sector = df.copy()
-
 if filtro_sector != "Todos":
     df_sector = df_sector[df_sector["sector"] == filtro_sector]
 
+# df_vista: sector + estado (lo que seleccionó el usuario)
+df_vista = aplicar_filtro_estado(df_sector, filtro_estado)
 
-# --- 2) df_filtrado: df_base + filtro de estado (tabla) ---
-#df_filtrado = df_base.copy()
+# df_tablero: lo que usan KPIs + gráfico (aquí SÍ cambian con el radio)
+df_tablero = df_vista
 
-#pedido_lleno_base = serie_pedido_lleno(df_filtrado)
+# df_filtrado: lo que usa la tabla (igual df_vista)
+df_filtrado = df_vista
 
-#if filtro_estado == "Pendientes de Elaborar":
-#    df_filtrado = df_filtrado[df_filtrado['fecha_elaboracion'].isnull()]
-
-#elif filtro_estado == "Pendientes de Conciliar":
-#    df_filtrado = df_filtrado[
- #       df_filtrado['fecha_elaboracion'].notnull() &
- #       df_filtrado['fecha_conciliacion'].isnull()
-#    ]
-
-#elif filtro_estado == "Pendientes de Pedido":
-#    df_filtrado = df_filtrado[
-#        df_filtrado['fecha_conciliacion'].notnull() &
-#        (~pedido_lleno_base)
-#    ]
-
-#elif filtro_estado == "Pedidos Recibidos":
-#    df_filtrado = df_filtrado[
- #       df_filtrado['fecha_conciliacion'].notnull() &
-#        (pedido_lleno_base)
-#    ]
-
-# --- KPIs / Pipeline (calculados sobre df_base para que siempre tengan sentido) ---
+# =========================
+# 8) KPIs / PIPELINE (df_tablero)
+# =========================
 st.header(f"Tablero de Control: {filtro_sector}")
+st.caption(f"Vista: {filtro_estado} | Registros: {len(df_tablero)}")
 
-kpi_total = len(df_base)
+kpi_total = len(df_tablero)
+pedido_lleno = serie_pedido_lleno(df_tablero)
 
-pedido_lleno = serie_pedido_lleno(df_base)
-
-por_elaborar = df_base['fecha_elaboracion'].isnull().sum()
+por_elaborar = df_tablero['fecha_elaboracion'].isnull().sum() if 'fecha_elaboracion' in df_tablero.columns else 0
 por_conciliar = (
-    df_base['fecha_elaboracion'].notnull() &
-    df_base['fecha_conciliacion'].isnull()
-).sum()
+    df_tablero['fecha_elaboracion'].notnull() &
+    df_tablero['fecha_conciliacion'].isnull()
+).sum() if ('fecha_elaboracion' in df_tablero.columns and 'fecha_conciliacion' in df_tablero.columns) else 0
+
 pendiente_pedido = (
-    df_base['fecha_conciliacion'].notnull() &
+    df_tablero['fecha_conciliacion'].notnull() &
     (~pedido_lleno)
-).sum()
+).sum() if 'fecha_conciliacion' in df_tablero.columns else 0
+
 pedido_recibido = (
-    df_base['fecha_conciliacion'].notnull() &
+    df_tablero['fecha_conciliacion'].notnull() &
     (pedido_lleno)
-).sum()
+).sum() if 'fecha_conciliacion' in df_tablero.columns else 0
 
 sin_clasificar = max(0, kpi_total - (por_elaborar + por_conciliar + pendiente_pedido + pedido_recibido))
 
-def pct(n, d): 
+def pct(n, d):
     return (n / d) if d else 0
 
-p1, p2, p3, p4 = pct(por_elaborar, kpi_total), pct(por_conciliar, kpi_total), pct(pendiente_pedido, kpi_total), pct(pedido_recibido, kpi_total)
+p1, p2, p3, p4 = (
+    pct(por_elaborar, kpi_total),
+    pct(por_conciliar, kpi_total),
+    pct(pendiente_pedido, kpi_total),
+    pct(pedido_recibido, kpi_total),
+)
 
 st.markdown(f"""
 <div class="pipe-wrap">
@@ -192,7 +234,7 @@ st.markdown(f"""
       <span class="badge" style="background:rgba(37,99,235,0.12); color:rgb(37,99,235);">Base</span>
     </div>
     <div class="pipe-value">{kpi_total}</div>
-    <div class="pipe-sub">Registros (solo filtro de sector)</div>
+    <div class="pipe-sub">Registros (según filtros)</div>
     <div class="pipe-bar"><span style="width:100%; background:rgb(37,99,235)"></span></div>
   </div>
 
@@ -215,11 +257,11 @@ st.markdown(f"""
   </div>
 
   <div class="pipe-card">
-    <div class="pipe-title">🧩 Etapa 3 · Conciliada y sin Pedido
+    <div class="pipe-title">🧩 Etapa 3 · Pendiente de Pedido
       <span class="badge" style="background:rgba(168,85,247,0.14); color:rgb(126,34,206);">{p3:.0%}</span>
     </div>
     <div class="pipe-value">{pendiente_pedido}</div>
-    <div class="pipe-sub">Conciliada y sin <b>pedido</b> </div>
+    <div class="pipe-sub">Conciliada y sin <b>pedido</b></div>
     <div class="pipe-bar"><span style="width:{p3*100:.0f}%; background:rgb(168,85,247)"></span></div>
   </div>
 
@@ -240,78 +282,67 @@ if sin_clasificar > 0:
 
 st.divider()
 
-# --- Gráfico apilado por etapa (usa df_base para no distorsionar por filtro de estado) ---
+# =========================
+# 9) STACKED CHART (df_tablero)
+# =========================
 st.subheader("📊 Distribución de la Carga (por etapa)")
-import altair as alt
-import numpy as np
 
-# IMPORTANTE: usar df_base (solo filtro de sector), NO df_filtrado
-df_g = df_base.copy()
+df_g = df_tablero.copy()
+df_g['Etapa'] = etapa_excluyente(df_g)
 
-# 1) Si hay sector seleccionado => SIEMPRE por subsector
-col_categoria = 'subsector' if (filtro_sector != "Todos" and 'subsector' in df_g.columns) else 'sector'
-etiqueta = 'Subsector' if col_categoria == 'subsector' else 'Sector'
-
-# 2) Pedido lleno/vacío robusto
-if 'pedido' in df_g.columns:
-    pedido_lleno = df_g['pedido'].fillna('').astype(str).str.strip().ne('')
+# Cuando hay sector seleccionado => SIEMPRE por subsector (para visualizar Managua DN/DS)
+if filtro_sector != "Todos" and 'subsector' in df_g.columns:
+    col_categoria = 'subsector'
+    etiqueta = 'Subsector'
 else:
-    pedido_lleno = pd.Series([False] * len(df_g), index=df_g.index)
+    col_categoria = 'sector'
+    etiqueta = 'Sector'
 
-# 3) Etapas excluyentes (con nombres claros)
-etapas = ["1. Por elaborar", "2. Por conciliar", "3. Pendiente de pedido", "4. Pedido recibido"]
-conds = [
-    df_g['fecha_elaboracion'].isnull(),
-    df_g['fecha_elaboracion'].notnull() & df_g['fecha_conciliacion'].isnull(),
-    df_g['fecha_conciliacion'].notnull() & (~pedido_lleno),
-    df_g['fecha_conciliacion'].notnull() & (pedido_lleno),
-]
-df_g['Etapa'] = np.select(conds, etapas, default="Sin clasificar")
-
-# 4) Categoría limpia (y fallback: si subsector vacío, usa sector)
-cat = df_g[col_categoria].fillna('').astype(str).str.strip() if col_categoria in df_g.columns else pd.Series(['']*len(df_g))
+# Categoria limpia (fallback: si subsector vacío, usa sector)
+cat = df_g[col_categoria].fillna('').astype(str).str.strip() if col_categoria in df_g.columns else pd.Series([''] * len(df_g))
 if col_categoria == 'subsector':
     cat_sector = df_g['sector'].fillna('Sin dato').astype(str).str.strip()
-    df_g['Categoria'] = np.where(cat.ne(''), cat, cat_sector)
+    df_g['Categoria'] = np.where(cat != '', cat, cat_sector)
 else:
-    df_g['Categoria'] = np.where(cat.ne(''), cat, 'Sin dato')
+    df_g['Categoria'] = np.where(cat != '', cat, 'Sin dato')
 
-# 5) Resumen agregado
 resumen = (
     df_g.groupby(['Categoria', 'Etapa'], as_index=False)
         .size()
         .rename(columns={'size': 'Cantidad'})
 )
 
-# Total por categoría para ordenar
 tot_cat = resumen.groupby('Categoria', as_index=False)['Cantidad'].sum().rename(columns={'Cantidad': 'TotalCategoria'})
 resumen = resumen.merge(tot_cat, on='Categoria', how='left')
 
-orden_etapas = etapas + (["Sin clasificar"] if (resumen['Etapa'] == "Sin clasificar").any() else [])
+orden_etapas = ["1. Por Elaborar", "2. Por Conciliar", "3. Pendiente de Pedido", "4. Pedido Recibido"]
+if (resumen['Etapa'] == "Sin clasificar").any():
+    orden_etapas = orden_etapas + ["Sin clasificar"]
 
-# 6) Altura mínima + barras gruesas + etiquetas
 h = max(260, min(520, 60 + 30 * resumen['Categoria'].nunique()))
 
 base = alt.Chart(resumen).encode(
     y=alt.Y('Categoria:N', sort=alt.SortField(field='TotalCategoria', order='descending'), title=etiqueta),
     x=alt.X('Cantidad:Q', stack='zero', title='Nº Prefacturas'),
     color=alt.Color('Etapa:N', sort=orden_etapas, title='Etapa'),
-    tooltip=['Categoria:N', 'Etapa:N', 'Cantidad:Q', 'TotalCategoria:Q']
+    tooltip=[
+        alt.Tooltip('Categoria:N', title=etiqueta),
+        alt.Tooltip('Etapa:N', title='Etapa'),
+        alt.Tooltip('Cantidad:Q', title='Cantidad'),
+        alt.Tooltip('TotalCategoria:Q', title='Total categoría'),
+    ]
 )
 
 barras = base.mark_bar(size=26, cornerRadius=6, stroke='rgba(0,0,0,0.25)', strokeWidth=1)
-
-labels = base.transform_filter(
-    alt.datum.Cantidad > 0
-).mark_text(
+labels = base.transform_filter(alt.datum.Cantidad > 0).mark_text(
     align='left', baseline='middle', dx=6, fontSize=12
-).encode(
-    text='Cantidad:Q'
-)
+).encode(text='Cantidad:Q')
 
 st.altair_chart((barras + labels).properties(height=h), use_container_width=True)
 
-# --- Tabla ---
+# =========================
+# 10) TABLE (df_filtrado)
+# =========================
 st.subheader("📝 Gestión de Datos")
 
 configuracion_columnas = {
@@ -339,12 +370,17 @@ configuracion_columnas = {
     )
 }
 
-df_vista = aplicar_filtro_estado(df_sector, filtro_estado)   # sector + estado
-df_tablero = df_vista                                       # KPIs + gráfico
-df_filtrado = df_vista                                      # tabla
+df_editado = st.data_editor(
+    df_filtrado,
+    column_config=configuracion_columnas,
+    use_container_width=True,
+    num_rows="dynamic",
+    key="editor_principal"
+)
 
-
-# --- Guardar Cambios ---
+# =========================
+# 11) SAVE CHANGES
+# =========================
 if st.button("Guardar Cambios en Supabase"):
     try:
         datos_a_enviar = df_editado.copy()
@@ -371,10 +407,12 @@ if st.button("Guardar Cambios en Supabase"):
             nuevo_reg = reg.copy()
             id_val = nuevo_reg.get('id')
 
+            # limpiar created_at vacío
             if pd.isna(nuevo_reg.get('created_at')):
                 if 'created_at' in nuevo_reg:
                     del nuevo_reg['created_at']
 
+            # clasificar nuevo vs existente
             if id_val is None or pd.isna(id_val) or str(id_val).strip() == "":
                 if 'id' in nuevo_reg:
                     del nuevo_reg['id']
@@ -395,7 +433,9 @@ if st.button("Guardar Cambios en Supabase"):
     except Exception as e:
         st.error(f"Error al guardar: {e}")
 
-# --- EXPORTAR DATOS ---
+# =========================
+# 12) EXPORT CSV
+# =========================
 st.divider()
 csv = df_editado.to_csv(index=False).encode('utf-8')
 st.download_button(
@@ -404,7 +444,6 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
-
 
 
 

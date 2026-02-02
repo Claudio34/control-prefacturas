@@ -128,30 +128,30 @@ if filtro_sector != "Todos":
     df_base = df_base[df_base['sector'] == filtro_sector]
 
 # --- 2) df_filtrado: df_base + filtro de estado (tabla) ---
-df_filtrado = df_base.copy()
+#df_filtrado = df_base.copy()
 
-pedido_lleno_base = serie_pedido_lleno(df_filtrado)
+#pedido_lleno_base = serie_pedido_lleno(df_filtrado)
 
-if filtro_estado == "Pendientes de Elaborar":
-    df_filtrado = df_filtrado[df_filtrado['fecha_elaboracion'].isnull()]
+#if filtro_estado == "Pendientes de Elaborar":
+#    df_filtrado = df_filtrado[df_filtrado['fecha_elaboracion'].isnull()]
 
-elif filtro_estado == "Pendientes de Conciliar":
-    df_filtrado = df_filtrado[
-        df_filtrado['fecha_elaboracion'].notnull() &
-        df_filtrado['fecha_conciliacion'].isnull()
-    ]
+#elif filtro_estado == "Pendientes de Conciliar":
+#    df_filtrado = df_filtrado[
+ #       df_filtrado['fecha_elaboracion'].notnull() &
+ #       df_filtrado['fecha_conciliacion'].isnull()
+#    ]
 
-elif filtro_estado == "Pendientes de Pedido":
-    df_filtrado = df_filtrado[
-        df_filtrado['fecha_conciliacion'].notnull() &
-        (~pedido_lleno_base)
-    ]
+#elif filtro_estado == "Pendientes de Pedido":
+#    df_filtrado = df_filtrado[
+#        df_filtrado['fecha_conciliacion'].notnull() &
+#        (~pedido_lleno_base)
+#    ]
 
-elif filtro_estado == "Pedidos Recibidos":
-    df_filtrado = df_filtrado[
-        df_filtrado['fecha_conciliacion'].notnull() &
-        (pedido_lleno_base)
-    ]
+#elif filtro_estado == "Pedidos Recibidos":
+#    df_filtrado = df_filtrado[
+ #       df_filtrado['fecha_conciliacion'].notnull() &
+#        (pedido_lleno_base)
+#    ]
 
 # --- KPIs / Pipeline (calculados sobre df_base para que siempre tengan sentido) ---
 st.header(f"Tablero de Control: {filtro_sector}")
@@ -404,6 +404,7 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
 
 
 

@@ -93,10 +93,10 @@ if 'sector' not in df.columns:
 lista_sectores = ["Todos"] + sorted(df['sector'].dropna().unique().tolist())
 filtro_sector = st.sidebar.selectbox("Seleccionar Sector:", lista_sectores)
 
-filtro_estado = st.sidebar.radio(
-    "Mostrar solo:",
-    ["Ver Todo", "Pendientes de Elaborar", "Pendientes de Conciliar", "Pendientes de Pedido", "Pedidos Recibidos"]
-)
+#filtro_estado = st.sidebar.radio(
+#    "Mostrar solo:",
+#    ["Ver Todo", "Pendientes de Elaborar", "Pendientes de Conciliar", "Pendientes de Pedido", "Pedidos Recibidos"]
+#)
 
 # --- Helpers de ciclo (pedido lleno / vacío robusto) ---
 def serie_pedido_lleno(df_in: pd.DataFrame) -> pd.Series:
@@ -404,6 +404,7 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
 
 
 

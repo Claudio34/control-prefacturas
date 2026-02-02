@@ -117,35 +117,63 @@ col4.metric("Pedidos Listos", kpi_pedidos)
 
 st.divider()
 
-# --- 4. GRÁFICO DE BARRAS ---
+# --- 4. GRÁFICO DE BARRAS CON ETIQUETAS ---
 st.subheader("📊 Distribución de la Carga")
+import altair as alt # Necesario para los gráficos avanzados
 
 try:
-    if filtro_sector == "Todos":
-        # Estamos viendo TODOS: mostrar gráfico por SECTOR
-        # Usamos 'sector' en minúscula que es como viene de Supabase
-        if 'sector' in df_filtrado.columns:
-            grafico_data = df_filtrado['sector'].value_counts()
-            st.bar_chart(grafico_data)
-        else:
-            st.warning("⚠️ No encuentro la columna 'sector' para graficar.")
+    # 1. PREPARAR LOS DATOS
+    # Determinamos qué columna vamos a graficar (Sector o Subsector)
+    columna_grafico = 'sector' # Por defecto
+    etiqueta_eje = 'Sector'
 
-    else:
-        # Estamos filtrando uno específico: mostrar desglose por SUBSECTOR
-        # Primero intentamos buscar 'subsector' (minúscula)
+    if filtro_sector != "Todos":
+        # Si ya filtramos un sector, intentamos graficar por subsector
         if 'subsector' in df_filtrado.columns:
-            grafico_data = df_filtrado['subsector'].value_counts()
-            st.bar_chart(grafico_data)
-        # Si no existe, probamos 'Subsector' (Mayúscula) por si acaso
+            columna_grafico = 'subsector'
+            etiqueta_eje = 'Subsector'
         elif 'Subsector' in df_filtrado.columns:
-            grafico_data = df_filtrado['Subsector'].value_counts()
-            st.bar_chart(grafico_data)
-        else:
-            st.info("No hay columna de subsector para desglosar.")
+            columna_grafico = 'Subsector'
+            etiqueta_eje = 'Subsector'
+
+    # Creamos una tabla resumen para el gráfico (Categoría | Cantidad)
+    # .reset_index() convierte la Serie en un DataFrame real que Altair necesita
+    if columna_grafico in df_filtrado.columns:
+        datos_grafico = df_filtrado[columna_grafico].value_counts().reset_index()
+        datos_grafico.columns = ['Categoria', 'Cantidad'] # Renombramos para facilitar
+    else:
+        st.warning(f"No encuentro la columna '{columna_grafico}' para graficar.")
+        datos_grafico = None
+
+    # 2. DIBUJAR EL GRÁFICO (Si hay datos)
+    if datos_grafico is not None and not datos_grafico.empty:
+        
+        # A. Definimos la base (Datos y Ejes)
+        base = alt.Chart(datos_grafico).encode(
+            x=alt.X('Categoria', sort='-y', title=etiqueta_eje), # Ordenamos de mayor a menor
+            y=alt.Y('Cantidad', title='Nº Prefacturas'),
+            tooltip=['Categoria', 'Cantidad'] # Al pasar el mouse se ve el detalle
+        )
+
+        # B. Capa de Barras
+        barras = base.mark_bar()
+
+        # C. Capa de Texto (Los números encima)
+        textos = base.mark_text(
+            align='center',
+            baseline='bottom',
+            dy=-5,  # Desplaza el número 5 pixeles hacia arriba
+            fontSize=12,
+            color='black'
+        ).encode(
+            text='Cantidad' # Qué texto mostrar
+        )
+
+        # D. Combinamos y mostramos
+        st.altair_chart(barras + textos, use_container_width=True)
 
 except Exception as e:
     st.error(f"Error al generar el gráfico: {e}")
-
 # --- 5. TABLA DE EDICIÓN LIMPIA Y CONFIGURADA ---
 st.subheader("📝 Gestión de Datos")
 
@@ -263,6 +291,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

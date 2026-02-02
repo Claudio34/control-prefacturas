@@ -181,13 +181,11 @@ st.markdown(f"""
 st.divider()
 
 
-# --- 4. GRÁFICO DE BARRAS PRO (CON BORDES) ---
 st.subheader("📊 Distribución de la Carga")
 import altair as alt
 
 try:
-    # 1. PREPARAR LOS DATOS
-    columna_grafico = 'sector' # Por defecto
+    columna_grafico = col_sector
     etiqueta_eje = 'Sector'
 
     if filtro_sector != "Todos":
@@ -198,49 +196,48 @@ try:
             columna_grafico = 'Subsector'
             etiqueta_eje = 'Subsector'
 
-    # Tabla resumen
     if columna_grafico in df_filtrado.columns:
         datos_grafico = df_filtrado[columna_grafico].value_counts().reset_index()
         datos_grafico.columns = ['Categoria', 'Cantidad']
+        total_local = int(datos_grafico['Cantidad'].sum())
+        datos_grafico['Porcentaje'] = (datos_grafico['Cantidad'] / total_local) if total_local else 0
     else:
         st.warning(f"No encuentro la columna '{columna_grafico}' para graficar.")
         datos_grafico = None
 
-    # 2. DIBUJAR EL GRÁFICO
     if datos_grafico is not None and not datos_grafico.empty:
-        
+
         base = alt.Chart(datos_grafico).encode(
-            x=alt.X('Categoria', sort='-y', title=etiqueta_eje),
-            y=alt.Y('Cantidad', title='Nº Prefacturas'),
-            tooltip=['Categoria', 'Cantidad']
+            y=alt.Y('Categoria:N', sort='-x', title=etiqueta_eje),
+            x=alt.X('Cantidad:Q', title='Nº Prefacturas'),
+            tooltip=[
+                alt.Tooltip('Categoria:N', title=etiqueta_eje),
+                alt.Tooltip('Cantidad:Q', title='Cantidad'),
+                alt.Tooltip('Porcentaje:Q', title='%', format='.1%')
+            ]
         )
 
-        # CORRECCIÓN AQUÍ: Añadimos borde negro
         barras = base.mark_bar(
-            size=60, 
-            cornerRadiusTopLeft=5, 
-            cornerRadiusTopRight=5,
-            stroke='black',       # <--- Color del borde
-            strokeWidth=1         # <--- Grosor del borde
+            cornerRadius=6,
+            stroke='rgba(0,0,0,0.35)',
+            strokeWidth=1
         )
 
         textos = base.mark_text(
-            align='center',
-            baseline='bottom',
-            dy=-5,
-            fontSize=12,
-            color='black'
-        ).encode(
-            text='Cantidad'
-        )
+            align='left',
+            baseline='middle',
+            dx=6,
+            fontSize=12
+        ).encode(text='Cantidad:Q')
 
-        st.altair_chart(barras + textos, use_container_width=True)
+        st.altair_chart((barras + textos).properties(height=320), use_container_width=True)
 
     else:
         st.info("No hay datos para mostrar en el gráfico con los filtros actuales.")
 
 except Exception as e:
     st.error(f"Error al generar el gráfico: {e}")
+
     
 # --- 5. TABLA DE EDICIÓN LIMPIA Y CONFIGURADA ---
 st.subheader("📝 Gestión de Datos")
@@ -359,6 +356,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

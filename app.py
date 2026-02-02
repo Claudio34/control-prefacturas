@@ -325,7 +325,16 @@ h = max(260, min(520, 60 + 30 * resumen['Categoria'].nunique()))
 base = alt.Chart(resumen).encode(
     y=alt.Y('Categoria:N', sort=alt.SortField(field='TotalCategoria', order='descending'), title=etiqueta),
     x=alt.X('Cantidad:Q', stack='zero', title='Nº Prefacturas'),
-    color=alt.Color('Etapa:N', sort=orden_etapas, title='Etapas'),
+    color=alt.Color(
+    'Etapa:N',
+    sort=orden_etapas,
+    title='Etapas',
+    scale=alt.Scale(
+        domain=["Por Elaborar", "Por Conciliar", "Pendiente de Pedido", "Pedido Recibido", "Sin clasificar"],
+        range=["#60A5FA", "#1D4ED8", "#EF4444", "#86EFAC", "#9CA3AF"]  # rojo pendiente, verde claro recibido
+    )
+),
+
     tooltip=[
         alt.Tooltip('Categoria:N', title=etiqueta),
         alt.Tooltip('Etapa:N', title='Etapa'),
@@ -445,6 +454,7 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
 
 
 

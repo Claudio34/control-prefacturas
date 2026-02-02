@@ -152,10 +152,10 @@ def etapa_excluyente(df_in: pd.DataFrame) -> pd.Series:
         df_in['fecha_conciliacion'].notnull() & (pedido_lleno),
     ]
     etapas = [
-        "1. Por Elaborar",
-        "2. Por Conciliar",
-        "3. Pendiente de Pedido",
-        "4. Pedido Recibido",
+        "Por Elaborar",
+        "Por Conciliar",
+        "Pendiente de Pedido",
+        "Pedido Recibido",
     ]
     return pd.Series(np.select(conds, etapas, default="Sin clasificar"), index=df_in.index)
 
@@ -315,7 +315,8 @@ resumen = (
 tot_cat = resumen.groupby('Categoria', as_index=False)['Cantidad'].sum().rename(columns={'Cantidad': 'TotalCategoria'})
 resumen = resumen.merge(tot_cat, on='Categoria', how='left')
 
-orden_etapas = ["Por Elaborar", "Por Conciliar", "Pendiente de Pedido", "Pedido Recibido"]
+orden_etapas = ["1. Por Elaborar", "2. Por Conciliar", "3. Pendiente de Pedido", "4. Pedido Recibido"]
+
 if (resumen['Etapa'] == "Sin clasificar").any():
     orden_etapas = orden_etapas + ["Sin clasificar"]
 
@@ -444,6 +445,7 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
 
 
 

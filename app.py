@@ -117,7 +117,7 @@ col4.metric("Pedidos Listos", kpi_pedidos)
 
 st.divider()
 
-# --- 4. GRÁFICO DE BARRAS PRO ---
+# --- 4. GRÁFICO DE BARRAS PRO (CORREGIDO) ---
 st.subheader("📊 Distribución de la Carga")
 import altair as alt
 
@@ -126,7 +126,6 @@ try:
     columna_grafico = 'sector' # Por defecto
     etiqueta_eje = 'Sector'
 
-    # Lógica para decidir qué graficar según el filtro
     if filtro_sector != "Todos":
         if 'subsector' in df_filtrado.columns:
             columna_grafico = 'subsector'
@@ -135,7 +134,7 @@ try:
             columna_grafico = 'Subsector'
             etiqueta_eje = 'Subsector'
 
-    # Creamos la tabla de resumen
+    # Tabla resumen
     if columna_grafico in df_filtrado.columns:
         datos_grafico = df_filtrado[columna_grafico].value_counts().reset_index()
         datos_grafico.columns = ['Categoria', 'Cantidad']
@@ -146,19 +145,19 @@ try:
     # 2. DIBUJAR EL GRÁFICO
     if datos_grafico is not None and not datos_grafico.empty:
         
-        # A. Base del gráfico
         base = alt.Chart(datos_grafico).encode(
             x=alt.X('Categoria', sort='-y', title=etiqueta_eje),
             y=alt.Y('Cantidad', title='Nº Prefacturas'),
             tooltip=['Categoria', 'Cantidad']
         )
 
-        # B. Barras (AQUÍ ESTÁ EL TRUCO)
-        # size=60: Fija el grosor para que no se engorde si está sola
-        # cornerRadiusTop=5: Redondea las esquinas superiores (se ve más pro)
-        barras = base.mark_bar(size=60, cornerRadiusTop=5)
+        # CORRECCIÓN AQUÍ: Usamos TopLeft y TopRight por separado
+        barras = base.mark_bar(
+            size=60, 
+            cornerRadiusTopLeft=5, 
+            cornerRadiusTopRight=5
+        )
 
-        # C. Números encima de las barras
         textos = base.mark_text(
             align='center',
             baseline='bottom',
@@ -169,7 +168,6 @@ try:
             text='Cantidad'
         )
 
-        # D. Mostrar gráfico
         st.altair_chart(barras + textos, use_container_width=True)
 
     else:
@@ -295,6 +293,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

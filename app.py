@@ -119,25 +119,67 @@ elif filtro_estado == "Pendientes de Conciliar":
 # --- 3. INDICADORES DINÁMICOS (KPIs) ---
 st.header(f"Tablero de Control: {filtro_sector}")
 
-# Cálculos (se mantienen igual)
 kpi_total = len(df_filtrado)
 kpi_elaborar = df_filtrado['fecha_elaboracion'].isnull().sum()
 kpi_conciliar = df_filtrado['fecha_conciliacion'].isnull().sum()
+kpi_pedidos = df_filtrado['pedido'].notnull().sum() if 'pedido' in df_filtrado.columns else 0
 
-if 'pedido' in df_filtrado.columns:
-    kpi_pedidos = df_filtrado['pedido'].notnull().sum()
-else:
-    kpi_pedidos = 0
+def pct(n, d):
+    return (n / d) if d else 0
 
-# Visualización (Textos actualizados según tu imagen)
-col1, col2, col3, col4 = st.columns(4)
+p_elab = pct(kpi_elaborar, kpi_total)
+p_conc = pct(kpi_conciliar, kpi_total)
 
-col1.metric("Total Prefacturas", kpi_total)          # Antes: Total Vista Actual
-col2.metric("Prefacturas por Elaborar", kpi_elaborar)# Antes: Falta Elaborar
-col3.metric("Prefacturas por Conciliar", kpi_conciliar) # Antes: Falta Conciliar
-col4.metric("Pedidos Recibidos", kpi_pedidos)        # Antes: Pedidos Listos
+# “completado” como referencia visual (no asume exclusividad, solo muestra proporción pendiente vs total)
+c_elab = 1 - p_elab
+c_conc = 1 - p_conc
+
+st.markdown(f"""
+<div class="kpi-grid">
+
+  <div class="kpi-card">
+    <div class="kpi-title">📦 Total Prefacturas
+      <span class="kpi-chip" style="background:rgba(37,99,235,0.12); color:rgb(37,99,235);">Base</span>
+    </div>
+    <div class="kpi-value">{kpi_total}</div>
+    <div class="kpi-sub">Registros en vista actual</div>
+    <div class="kpi-bar"><span style="width:100%; background:rgb(37,99,235)"></span></div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-title">🧾 Prefacturas por Elaborar
+      <span class="kpi-chip" style="background:rgba(245,158,11,0.14); color:rgb(161,98,7);">{p_elab:.0%}</span>
+    </div>
+    <div class="kpi-value">{kpi_elaborar}</div>
+    <div class="kpi-sub">Pendientes de fecha de elaboración</div>
+    <div class="kpi-bar"><span style="width:{max(0,min(100,c_elab*100)):.0f}%; background:rgb(245,158,11)"></span></div>
+    <div class="small-muted">Avance aprox.: {c_elab:.0%}</div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-title">✅ Prefacturas por Conciliar
+      <span class="kpi-chip" style="background:rgba(59,130,246,0.14); color:rgb(29,78,216);">{p_conc:.0%}</span>
+    </div>
+    <div class="kpi-value">{kpi_conciliar}</div>
+    <div class="kpi-sub">Pendientes de fecha de conciliación</div>
+    <div class="kpi-bar"><span style="width:{max(0,min(100,c_conc*100)):.0f}%; background:rgb(59,130,246)"></span></div>
+    <div class="small-muted">Avance aprox.: {c_conc:.0%}</div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-title">📩 Pedidos Recibidos
+      <span class="kpi-chip" style="background:rgba(16,185,129,0.14); color:rgb(4,120,87);">Info</span>
+    </div>
+    <div class="kpi-value">{kpi_pedidos}</div>
+    <div class="kpi-sub">Con campo <b>pedido</b> no nulo</div>
+    <div class="kpi-bar"><span style="width:{max(0,min(100,pct(kpi_pedidos,kpi_total)*100)):.0f}%; background:rgb(16,185,129)"></span></div>
+  </div>
+
+</div>
+""", unsafe_allow_html=True)
 
 st.divider()
+
 
 # --- 4. GRÁFICO DE BARRAS PRO (CON BORDES) ---
 st.subheader("📊 Distribución de la Carga")
@@ -317,6 +359,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

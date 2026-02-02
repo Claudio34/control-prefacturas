@@ -120,6 +120,32 @@ st.divider()
 # --- 4. GRÁFICO DE BARRAS ---
 st.subheader("📊 Distribución de la Carga")
 
+try:
+    if filtro_sector == "Todos":
+        # Estamos viendo TODOS: mostrar gráfico por SECTOR
+        # Usamos 'sector' en minúscula que es como viene de Supabase
+        if 'sector' in df_filtrado.columns:
+            grafico_data = df_filtrado['sector'].value_counts()
+            st.bar_chart(grafico_data)
+        else:
+            st.warning("⚠️ No encuentro la columna 'sector' para graficar.")
+
+    else:
+        # Estamos filtrando uno específico: mostrar desglose por SUBSECTOR
+        # Primero intentamos buscar 'subsector' (minúscula)
+        if 'subsector' in df_filtrado.columns:
+            grafico_data = df_filtrado['subsector'].value_counts()
+            st.bar_chart(grafico_data)
+        # Si no existe, probamos 'Subsector' (Mayúscula) por si acaso
+        elif 'Subsector' in df_filtrado.columns:
+            grafico_data = df_filtrado['Subsector'].value_counts()
+            st.bar_chart(grafico_data)
+        else:
+            st.info("No hay columna de subsector para desglosar.")
+
+except Exception as e:
+    st.error(f"Error al generar el gráfico: {e}")
+
 # --- 5. TABLA DE EDICIÓN LIMPIA Y CONFIGURADA ---
 st.subheader("📝 Gestión de Datos")
 
@@ -237,6 +263,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

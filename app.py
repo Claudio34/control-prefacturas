@@ -115,10 +115,10 @@ def etapa_excluyente(df_in: pd.DataFrame) -> pd.Series:
         df_in['fecha_conciliacion'].notnull() & (pedido_lleno),
     ]
     etapas = [
-        "1. Elaborar",
-        "2. Conciliar",
-        "3. Pendiente de pedido",
-        "4. Pedido recibido",
+        "1. Por Elaborar",
+        "2. Por Conciliar",
+        "3. Pendiente de Pedido",
+        "4. Pedido Recibido",
     ]
     return pd.Series(np.select(conds, etapas, default="Sin clasificar"), index=df_in.index)
 
@@ -380,6 +380,7 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
 
 
 

@@ -315,7 +315,7 @@ resumen = (
 tot_cat = resumen.groupby('Categoria', as_index=False)['Cantidad'].sum().rename(columns={'Cantidad': 'TotalCategoria'})
 resumen = resumen.merge(tot_cat, on='Categoria', how='left')
 
-orden_etapas = ["1. Por Elaborar", "2. Por Conciliar", "3. Pendiente de Pedido", "4. Pedido Recibido"]
+orden_etapas = ["Por Elaborar", "Por Conciliar", "Pendiente de Pedido", "Pedido Recibido"]
 if (resumen['Etapa'] == "Sin clasificar").any():
     orden_etapas = orden_etapas + ["Sin clasificar"]
 
@@ -444,6 +444,7 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
 
 
 

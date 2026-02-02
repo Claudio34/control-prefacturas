@@ -153,7 +153,7 @@ try:
 
         # CORRECCIÓN AQUÍ: Usamos TopLeft y TopRight por separado
         barras = base.mark_bar(
-            size=60, 
+            size=90, 
             cornerRadiusTopLeft=5, 
             cornerRadiusTopRight=5
         )
@@ -293,6 +293,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

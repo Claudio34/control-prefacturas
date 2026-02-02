@@ -123,14 +123,19 @@ st.subheader("📊 Distribución de la Carga")
 # --- 5. TABLA DE EDICIÓN LIMPIA Y CONFIGURADA ---
 st.subheader("📝 Gestión de Datos")
 
-# Configuración MAESTRA (Une ocultar columnas + Calendarios)
+# Configuración MAESTRA (Añadimos títulos bonitos a las minúsculas)
 configuracion_columnas = {
     # A. Columnas Técnicas (Ocultas o Bloqueadas)
-    "created_at": None,   # Ocultamos fecha creación visualmente
-    "id": None,           # Ocultamos el ID visualmente
-    "Sector": {"disabled": True}, # Bloqueamos editar el Sector manual
+    "created_at": None,   
+    "id": None,           
+    
+    # B. Renombrar encabezados (¡Nuevo!)
+    "sector": st.column_config.TextColumn("Sector", disabled=True), # Bloqueado y con Mayúscula
+    "subsector": st.column_config.TextColumn("Subsector"),
+    "periodo": st.column_config.TextColumn("Periodo"),
+    "sub_area": st.column_config.TextColumn("Sub Área"),
 
-    # B. Configuración de Fechas (Para que salgan los Calendarios)
+    # C. Configuración de Fechas
     "fecha_elaboracion": st.column_config.DateColumn("Fecha Elaboración", format="DD/MM/YYYY"),
     "fecha_formato": st.column_config.DateColumn("Fecha Formato", format="DD/MM/YYYY"),
     "fecha_solicitud_modificacion": st.column_config.DateColumn("Fecha Sol. Modif.", format="DD/MM/YYYY"),
@@ -141,12 +146,14 @@ configuracion_columnas = {
     "fecha_firma_dnds": st.column_config.DateColumn("Firma DNDS", format="DD/MM/YYYY", help="Si está vacía, se considera PENDIENTE"),
     "fecha_edicion_pedido": st.column_config.DateColumn("Fecha Edición Pedido", format="DD/MM/YYYY"),
 
-    # C. Listas Desplegables
+    # D. Listas Desplegables
     "area": st.column_config.SelectboxColumn(
         "Área",
         options=["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER", "CAMPAÑA", "PSSEN"]
     )
 }
+
+# (El resto del código sigue igual...)
 
 # Mostramos la tabla y guardamos el resultado en 'df_editado'
 # IMPORTANTE: Usamos 'df_editado' para que coincida con tu botón de guardar de abajo
@@ -230,6 +237,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

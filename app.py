@@ -225,7 +225,7 @@ st.markdown(f"""
       <span class="badge" style="background:rgba(16,185,129,0.14); color:rgb(4,120,87);">{p4:.0%}</span>
     </div>
     <div class="pipe-value">{pedido_recibido}</div>
-    <div class="pipe-sub">Conciliada y con <b>pedido</b> lleno</div>
+    <div class="pipe-sub">Conciliada y con <b>pedido</b></div>
     <div class="pipe-bar"><span style="width:{p4*100:.0f}%; background:rgb(16,185,129)"></span></div>
   </div>
 
@@ -380,6 +380,7 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
 
 
 

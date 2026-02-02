@@ -1,16 +1,14 @@
 import streamlit as st
 import pandas as pd
-from supabase import create_client, Client
+from supabase import create_client
 from datetime import datetime
+import altair as alt
+import numpy as np
 
 # 1. Configuración de la página (Debe ser lo primero)
 st.set_page_config(page_title="PREFACTURAS", layout="wide")
 
-
-
-
 # 2. Conexión a Supabase (Usa st.secrets en producción)
-# Por ahora pon tus llaves aquí para probar, luego las movemos a un archivo seguro
 URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 
@@ -20,208 +18,101 @@ def init_connection():
 
 supabase = init_connection()
 
-# 3. Título y Métricas Rápidas
+# 3. Título
 st.title("⚡ PREFACTURAS")
-
 st.caption(f"Última actualización: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
+# --- CSS para KPIs tipo pipeline ---
 st.markdown("""
 <style>
-.kpi-grid {display:flex; gap:14px; margin-top:10px; margin-bottom:8px;}
-.kpi-card {
-  flex:1; padding:16px 18px; border-radius:16px;
+.pipe-wrap{display:flex; gap:14px; align-items:stretch; margin:12px 0 8px 0; flex-wrap:wrap;}
+.pipe-card{
+  flex:1; min-width:210px;
+  padding:16px 18px; border-radius:16px;
   border:1px solid rgba(49,51,63,0.15);
-  background: rgba(255,255,255,0.65);
+  background: rgba(255,255,255,0.70);
   box-shadow: 0 1px 2px rgba(0,0,0,0.04);
 }
-.kpi-title {font-size:0.85rem; color:#6b7280; font-weight:700; margin-bottom:6px; display:flex; gap:8px; align-items:center;}
-.kpi-value {font-size:2.1rem; font-weight:900; line-height:1.05; color:#111827;}
-.kpi-sub {margin-top:6px; font-size:0.85rem; color:#6b7280;}
-.kpi-chip {display:inline-block; padding:2px 10px; border-radius:999px; font-size:0.75rem; font-weight:800; margin-left:8px;}
-.kpi-bar {height:8px; background:rgba(15,23,42,0.08); border-radius:999px; overflow:hidden; margin-top:10px;}
-.kpi-bar > span {display:block; height:100%; border-radius:999px;}
-.small-muted {color:#6b7280; font-size:0.82rem;}
+.pipe-title{font-size:.85rem; color:#6b7280; font-weight:800; display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+.pipe-value{font-size:2.0rem; font-weight:900; color:#111827; line-height:1.05; margin-top:6px;}
+.pipe-sub{font-size:.82rem; color:#6b7280; margin-top:6px;}
+.pipe-bar{height:8px; background:rgba(15,23,42,0.08); border-radius:999px; overflow:hidden; margin-top:10px;}
+.pipe-bar span{display:block; height:100%; border-radius:999px;}
+.badge{display:inline-block; padding:2px 10px; border-radius:999px; font-size:.75rem; font-weight:900;}
+.small-muted{color:#6b7280; font-size:.82rem; margin-top:4px;}
 </style>
 """, unsafe_allow_html=True)
-
-
-
 
 # Función para cargar datos
 def cargar_datos():
     response = supabase.table('prefacturas_pedidos').select("*").order('id').execute()
-    df = pd.DataFrame(response.data)
-    return df
+    df_local = pd.DataFrame(response.data)
+    return df_local
 
-# Cargar el dataframe
 df = cargar_datos()
-
-# --- BLOQUE 1: Convertir texto a fechas reales (Incluyendo Firma DNDS) ---
-columnas_fechas = [
-    "fecha_elaboracion", 
-    "fecha_formato", 
-    "fecha_solicitud_modificacion", 
-    "fecha_entrega_post_modificacion", 
-    "fecha_conciliacion", 
-    "fecha_firma_ingenica",
-    "fecha_entrega_final_ingenica_central",
-    "fecha_firma_dnds",  # <--- AGREGADA OTRA VEZ COMO FECHA
-    "fecha_edicion_pedido"  # <--- ¡NUEVA AGREGADA AQUÍ!
-]
-
-for col in columnas_fechas:
-    if col in df.columns:
-        # Convertir a datetime y quitar la hora
-        df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
-# -------------------------------------------------------------
-
-# --- 1. BARRA LATERAL DE FILTROS (SIDEBAR) ---
-# Esto crea el menú a la izquierda
-st.sidebar.header("🎯 Filtros de Gestión")
-
-# A. Filtro por Sector
-# Ordenamos los sectores y agregamos la opción "Todos"
-# --- 1. BARRA LATERAL DE FILTROS (SIDEBAR) ---
-#st.sidebar.header("🎯 Filtros de Gestión")
 
 # VERIFICACIÓN DE SEGURIDAD
 if df.empty:
     st.warning("⚠️ No se han cargado datos. Revisa tu conexión a Supabase.")
-    st.stop() # Detiene la app aquí para que no de error
-
-# A. Filtro por Sector (Intentamos buscar 'Sector' o 'sector')
-if 'Sector' in df.columns:
-    col_sector = 'Sector'
-elif 'sector' in df.columns:
-    col_sector = 'sector'
-else:
-    st.error("❌ No encuentro la columna de Sector. Tus columnas son: " + str(df.columns.tolist()))
     st.stop()
 
-# Usamos la columna detectada (col_sector) en lugar del nombre fijo
-lista_sectores = ["Todos"] + sorted(df[col_sector].unique().tolist())
+# --- Normalización de nombres de columnas (por si vienen con mayúsculas) ---
+# Esto evita inconsistencias y te simplifica todo el código.
+rename_map = {}
+if 'Sector' in df.columns and 'sector' not in df.columns:
+    rename_map['Sector'] = 'sector'
+if 'Subsector' in df.columns and 'subsector' not in df.columns:
+    rename_map['Subsector'] = 'subsector'
+if rename_map:
+    df = df.rename(columns=rename_map)
+
+# --- Convertir texto a fechas reales ---
+columnas_fechas = [
+    "fecha_elaboracion",
+    "fecha_formato",
+    "fecha_solicitud_modificacion",
+    "fecha_entrega_post_modificacion",
+    "fecha_conciliacion",
+    "fecha_firma_ingenica",
+    "fecha_entrega_final_ingenica_central",
+    "fecha_firma_dnds",
+    "fecha_edicion_pedido"
+]
+for col in columnas_fechas:
+    if col in df.columns:
+        df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
+
+# --- Sidebar de filtros ---
+st.sidebar.header("🎯 Filtros de Gestión")
+
+# Validar columna sector ya normalizada
+if 'sector' not in df.columns:
+    st.error("❌ No encuentro la columna 'sector' en los datos. Columnas detectadas: " + str(df.columns.tolist()))
+    st.stop()
+
+lista_sectores = ["Todos"] + sorted(df['sector'].dropna().unique().tolist())
 filtro_sector = st.sidebar.selectbox("Seleccionar Sector:", lista_sectores)
-# B. Filtro Rápido de Estado
+
 filtro_estado = st.sidebar.radio(
     "Mostrar solo:",
-    ["Ver Todo", "Pendientes de Elaborar", "Pendientes de Conciliar"]
+    ["Ver Todo", "Pendientes de Elaborar", "Pendientes de Conciliar", "Pendientes de Pedido", "Pedidos Recibidos"]
 )
 
-# --- 2. APLICACIÓN DE FILTROS ---
-# Creamos una copia de los datos para filtrar sin perder los originales
-df_filtrado = df.copy()
+# --- Helpers de ciclo (pedido lleno / vacío robusto) ---
+def serie_pedido_lleno(df_in: pd.DataFrame) -> pd.Series:
+    if 'pedido' not in df_in.columns:
+        return pd.Series([False] * len(df_in), index=df_in.index)
+    return df_in['pedido'].fillna('').astype(str).str.strip().ne('')
 
-# Filtro de Sector (CORRECTO)
-if filtro_sector != "Todos":
-    df_filtrado = df_filtrado[df_filtrado[col_sector] == filtro_sector]
-
-
-# Filtro de Estado (Lógica corregida según tus indicaciones)
-if filtro_estado == "Pendientes de Elaborar":
-    df_filtrado = df_filtrado[df_filtrado['fecha_elaboracion'].isnull()]
-elif filtro_estado == "Pendientes de Conciliar":
-    df_filtrado = df_filtrado[df_filtrado['fecha_conciliacion'].isnull()]
-
-# --- 3. INDICADORES DINÁMICOS (KPIs) ---
-st.header(f"Tablero de Control: {filtro_sector}")
-
-kpi_total = len(df_filtrado)
-kpi_elaborar = df_filtrado['fecha_elaboracion'].isnull().sum()
-kpi_conciliar = df_filtrado['fecha_conciliacion'].isnull().sum()
-kpi_pedidos = df_filtrado['pedido'].notnull().sum() if 'pedido' in df_filtrado.columns else 0
-
-def pct(n, d):
-    return (n / d) if d else 0
-
-p_elab = pct(kpi_elaborar, kpi_total)
-p_conc = pct(kpi_conciliar, kpi_total)
-
-# “completado” como referencia visual (no asume exclusividad, solo muestra proporción pendiente vs total)
-c_elab = 1 - p_elab
-c_conc = 1 - p_conc
-
-st.markdown(f"""
-<div class="kpi-grid">
-
-  <div class="kpi-card">
-    <div class="kpi-title">📦 Total Prefacturas
-      <span class="kpi-chip" style="background:rgba(37,99,235,0.12); color:rgb(37,99,235);">Base</span>
-    </div>
-    <div class="kpi-value">{kpi_total}</div>
-    <div class="kpi-sub">Registros en vista actual</div>
-    <div class="kpi-bar"><span style="width:100%; background:rgb(37,99,235)"></span></div>
-  </div>
-
-  <div class="kpi-card">
-    <div class="kpi-title">🧾 Prefacturas por Elaborar
-      <span class="kpi-chip" style="background:rgba(245,158,11,0.14); color:rgb(161,98,7);">{p_elab:.0%}</span>
-    </div>
-    <div class="kpi-value">{kpi_elaborar}</div>
-    <div class="kpi-sub">Pendientes de fecha de elaboración</div>
-    <div class="kpi-bar"><span style="width:{max(0,min(100,c_elab*100)):.0f}%; background:rgb(245,158,11)"></span></div>
-    <div class="small-muted">Avance aprox.: {c_elab:.0%}</div>
-  </div>
-
-  <div class="kpi-card">
-    <div class="kpi-title">✅ Prefacturas por Conciliar
-      <span class="kpi-chip" style="background:rgba(59,130,246,0.14); color:rgb(29,78,216);">{p_conc:.0%}</span>
-    </div>
-    <div class="kpi-value">{kpi_conciliar}</div>
-    <div class="kpi-sub">Pendientes de fecha de conciliación</div>
-    <div class="kpi-bar"><span style="width:{max(0,min(100,c_conc*100)):.0f}%; background:rgb(59,130,246)"></span></div>
-    <div class="small-muted">Avance aprox.: {c_conc:.0%}</div>
-  </div>
-
-  <div class="kpi-card">
-    <div class="kpi-title">📩 Pedidos Recibidos
-      <span class="kpi-chip" style="background:rgba(16,185,129,0.14); color:rgb(4,120,87);">Info</span>
-    </div>
-    <div class="kpi-value">{kpi_pedidos}</div>
-    <div class="kpi-sub">Con campo <b>pedido</b> no nulo</div>
-    <div class="kpi-bar"><span style="width:{max(0,min(100,pct(kpi_pedidos,kpi_total)*100)):.0f}%; background:rgb(16,185,129)"></span></div>
-  </div>
-
-</div>
-""", unsafe_allow_html=True)
-
-st.divider()
-
-
-st.subheader("📊 Distribución de la Carga (por etapa)")
-import altair as alt
-import numpy as np
-
-try:
-    # 1) Definir columna categoría: Sector (si "Todos") o Subsector (si filtraste un sector)
-    col_categoria = col_sector
-    etiqueta = "Sector"
-
-    if filtro_sector != "Todos":
-        if 'subsector' in df_filtrado.columns:
-            col_categoria = 'subsector'
-            etiqueta = 'Subsector'
-        elif 'Subsector' in df_filtrado.columns:
-            col_categoria = 'Subsector'
-            etiqueta = 'Subsector'
-
-    if col_categoria not in df_filtrado.columns:
-        st.warning(f"No encuentro la columna '{col_categoria}' para graficar.")
-        st.stop()
-
-    # 2) Crear la etapa (EXCLUYENTE) por fila
-    df_g = df_filtrado.copy()
-
-    # pedido lleno/vacío robusto (None, "", "   ")
-    if 'pedido' in df_g.columns:
-        pedido_lleno = df_g['pedido'].fillna('').astype(str).str.strip().ne('')
-    else:
-        pedido_lleno = pd.Series([False] * len(df_g), index=df_g.index)
+def etapa_excluyente(df_in: pd.DataFrame) -> pd.Series:
+    """Devuelve una etapa por fila (excluyente) según tu ciclo."""
+    pedido_lleno = serie_pedido_lleno(df_in)
 
     conds = [
-        df_g['fecha_elaboracion'].isnull(),
-        df_g['fecha_elaboracion'].notnull() & df_g['fecha_conciliacion'].isnull(),
-        df_g['fecha_conciliacion'].notnull() & (~pedido_lleno),
-        df_g['fecha_conciliacion'].notnull() & (pedido_lleno),
+        df_in['fecha_elaboracion'].isnull(),
+        df_in['fecha_elaboracion'].notnull() & df_in['fecha_conciliacion'].isnull(),
+        df_in['fecha_conciliacion'].notnull() & (~pedido_lleno),
+        df_in['fecha_conciliacion'].notnull() & (pedido_lleno),
     ]
     etapas = [
         "1. Elaborar",
@@ -229,66 +120,182 @@ try:
         "3. Pendiente de pedido",
         "4. Pedido recibido",
     ]
-    df_g['Etapa'] = np.select(conds, etapas, default="Sin clasificar")
-    df_g['Categoria'] = df_g[col_categoria].fillna("Sin dato")
+    return pd.Series(np.select(conds, etapas, default="Sin clasificar"), index=df_in.index)
 
-    # 3) Resumen para apilado
-    resumen = (
-        df_g.groupby(['Categoria', 'Etapa'])
-            .size()
-            .reset_index(name='Cantidad')
+# --- 1) df_base: solo filtro de sector (KPIs + gráficos) ---
+df_base = df.copy()
+if filtro_sector != "Todos":
+    df_base = df_base[df_base['sector'] == filtro_sector]
+
+# --- 2) df_filtrado: df_base + filtro de estado (tabla) ---
+df_filtrado = df_base.copy()
+
+pedido_lleno_base = serie_pedido_lleno(df_filtrado)
+
+if filtro_estado == "Pendientes de Elaborar":
+    df_filtrado = df_filtrado[df_filtrado['fecha_elaboracion'].isnull()]
+
+elif filtro_estado == "Pendientes de Conciliar":
+    df_filtrado = df_filtrado[
+        df_filtrado['fecha_elaboracion'].notnull() &
+        df_filtrado['fecha_conciliacion'].isnull()
+    ]
+
+elif filtro_estado == "Pendientes de Pedido":
+    df_filtrado = df_filtrado[
+        df_filtrado['fecha_conciliacion'].notnull() &
+        (~pedido_lleno_base)
+    ]
+
+elif filtro_estado == "Pedidos Recibidos":
+    df_filtrado = df_filtrado[
+        df_filtrado['fecha_conciliacion'].notnull() &
+        (pedido_lleno_base)
+    ]
+
+# --- KPIs / Pipeline (calculados sobre df_base para que siempre tengan sentido) ---
+st.header(f"Tablero de Control: {filtro_sector}")
+
+kpi_total = len(df_base)
+
+pedido_lleno = serie_pedido_lleno(df_base)
+
+por_elaborar = df_base['fecha_elaboracion'].isnull().sum()
+por_conciliar = (
+    df_base['fecha_elaboracion'].notnull() &
+    df_base['fecha_conciliacion'].isnull()
+).sum()
+pendiente_pedido = (
+    df_base['fecha_conciliacion'].notnull() &
+    (~pedido_lleno)
+).sum()
+pedido_recibido = (
+    df_base['fecha_conciliacion'].notnull() &
+    (pedido_lleno)
+).sum()
+
+sin_clasificar = max(0, kpi_total - (por_elaborar + por_conciliar + pendiente_pedido + pedido_recibido))
+
+def pct(n, d): 
+    return (n / d) if d else 0
+
+p1, p2, p3, p4 = pct(por_elaborar, kpi_total), pct(por_conciliar, kpi_total), pct(pendiente_pedido, kpi_total), pct(pedido_recibido, kpi_total)
+
+st.markdown(f"""
+<div class="pipe-wrap">
+
+  <div class="pipe-card">
+    <div class="pipe-title">📦 Total Prefacturas
+      <span class="badge" style="background:rgba(37,99,235,0.12); color:rgb(37,99,235);">Base</span>
+    </div>
+    <div class="pipe-value">{kpi_total}</div>
+    <div class="pipe-sub">Registros (solo filtro de sector)</div>
+    <div class="pipe-bar"><span style="width:100%; background:rgb(37,99,235)"></span></div>
+  </div>
+
+  <div class="pipe-card">
+    <div class="pipe-title">🧾 Etapa 1 · Elaborar
+      <span class="badge" style="background:rgba(245,158,11,0.14); color:rgb(161,98,7);">{p1:.0%}</span>
+    </div>
+    <div class="pipe-value">{por_elaborar}</div>
+    <div class="pipe-sub">Sin <b>fecha_elaboracion</b></div>
+    <div class="pipe-bar"><span style="width:{p1*100:.0f}%; background:rgb(245,158,11)"></span></div>
+  </div>
+
+  <div class="pipe-card">
+    <div class="pipe-title">✅ Etapa 2 · Conciliar
+      <span class="badge" style="background:rgba(59,130,246,0.14); color:rgb(29,78,216);">{p2:.0%}</span>
+    </div>
+    <div class="pipe-value">{por_conciliar}</div>
+    <div class="pipe-sub">Elaborada y sin <b>fecha_conciliacion</b></div>
+    <div class="pipe-bar"><span style="width:{p2*100:.0f}%; background:rgb(59,130,246)"></span></div>
+  </div>
+
+  <div class="pipe-card">
+    <div class="pipe-title">🧩 Etapa 3 · Pendiente de Pedido
+      <span class="badge" style="background:rgba(168,85,247,0.14); color:rgb(126,34,206);">{p3:.0%}</span>
+    </div>
+    <div class="pipe-value">{pendiente_pedido}</div>
+    <div class="pipe-sub">Conciliada y <b>pedido</b> vacío</div>
+    <div class="pipe-bar"><span style="width:{p3*100:.0f}%; background:rgb(168,85,247)"></span></div>
+  </div>
+
+  <div class="pipe-card">
+    <div class="pipe-title">📩 Etapa 4 · Pedido Recibido (Final)
+      <span class="badge" style="background:rgba(16,185,129,0.14); color:rgb(4,120,87);">{p4:.0%}</span>
+    </div>
+    <div class="pipe-value">{pedido_recibido}</div>
+    <div class="pipe-sub">Conciliada y con <b>pedido</b> lleno</div>
+    <div class="pipe-bar"><span style="width:{p4*100:.0f}%; background:rgb(16,185,129)"></span></div>
+  </div>
+
+</div>
+""", unsafe_allow_html=True)
+
+if sin_clasificar > 0:
+    st.warning(f"⚠️ Hay {sin_clasificar} registros 'Sin clasificar' (revisa fechas/pedido).")
+
+st.divider()
+
+# --- Gráfico apilado por etapa (usa df_base para no distorsionar por filtro de estado) ---
+st.subheader("📊 Distribución de la Carga (por etapa)")
+
+# categoría: si Todos -> sector, si sector específico -> subsector (si existe)
+col_categoria = 'sector'
+etiqueta = 'Sector'
+if filtro_sector != "Todos":
+    if 'subsector' in df_base.columns:
+        col_categoria = 'subsector'
+        etiqueta = 'Subsector'
+
+df_g = df_base.copy()
+df_g['Etapa'] = etapa_excluyente(df_g)
+df_g['Categoria'] = df_g[col_categoria].fillna("Sin dato") if col_categoria in df_g.columns else "Sin dato"
+
+resumen = (
+    df_g.groupby(['Categoria', 'Etapa'])
+        .size()
+        .reset_index(name='Cantidad')
+)
+
+tot_cat = resumen.groupby('Categoria')['Cantidad'].sum().reset_index(name='TotalCategoria')
+resumen = resumen.merge(tot_cat, on='Categoria', how='left')
+resumen['PorcCategoria'] = resumen['Cantidad'] / resumen['TotalCategoria']
+
+orden_etapas = ["1. Elaborar", "2. Conciliar", "3. Pendiente de pedido", "4. Pedido recibido", "Sin clasificar"]
+
+chart = (
+    alt.Chart(resumen)
+    .mark_bar(cornerRadius=6, stroke='rgba(0,0,0,0.25)', strokeWidth=1)
+    .encode(
+        y=alt.Y('Categoria:N', sort='-x', title=etiqueta),
+        x=alt.X('sum(Cantidad):Q', title='Nº Prefacturas'),
+        color=alt.Color('Etapa:N', sort=orden_etapas, title='Etapa'),
+        tooltip=[
+            alt.Tooltip('Categoria:N', title=etiqueta),
+            alt.Tooltip('Etapa:N', title='Etapa'),
+            alt.Tooltip('Cantidad:Q', title='Cantidad'),
+            alt.Tooltip('PorcCategoria:Q', title='% en categoría', format='.1%'),
+            alt.Tooltip('TotalCategoria:Q', title='Total categoría')
+        ]
     )
+    .properties(height=min(520, 60 + 28 * resumen['Categoria'].nunique()))
+)
 
-    # % dentro de cada categoría (para tooltip)
-    tot_cat = resumen.groupby('Categoria')['Cantidad'].sum().reset_index(name='TotalCategoria')
-    resumen = resumen.merge(tot_cat, on='Categoria', how='left')
-    resumen['PorcCategoria'] = resumen['Cantidad'] / resumen['TotalCategoria']
+st.altair_chart(chart, use_container_width=True)
 
-    # Orden de etapas (para que el stack siga el ciclo)
-    orden_etapas = etapas + (["Sin clasificar"] if (resumen['Etapa'] == "Sin clasificar").any() else [])
-
-    # 4) Gráfico apilado horizontal
-    chart = (
-        alt.Chart(resumen)
-        .mark_bar(cornerRadius=6, stroke='rgba(0,0,0,0.25)', strokeWidth=1)
-        .encode(
-            y=alt.Y('Categoria:N', sort='-x', title=etiqueta),
-            x=alt.X('sum(Cantidad):Q', title='Nº Prefacturas'),
-            color=alt.Color('Etapa:N', sort=orden_etapas, title='Etapa'),
-            tooltip=[
-                alt.Tooltip('Categoria:N', title=etiqueta),
-                alt.Tooltip('Etapa:N', title='Etapa'),
-                alt.Tooltip('Cantidad:Q', title='Cantidad'),
-                alt.Tooltip('PorcCategoria:Q', title='% en categoría', format='.1%'),
-                alt.Tooltip('TotalCategoria:Q', title='Total categoría')
-            ]
-        )
-        .properties(height=min(520, 60 + 28 * resumen['Categoria'].nunique()))
-    )
-
-    st.altair_chart(chart, use_container_width=True)
-
-except Exception as e:
-    st.error(f"Error al generar el gráfico apilado: {e}")
-
-
-    
-# --- 5. TABLA DE EDICIÓN LIMPIA Y CONFIGURADA ---
+# --- Tabla ---
 st.subheader("📝 Gestión de Datos")
 
-# Configuración MAESTRA (Añadimos títulos bonitos a las minúsculas)
 configuracion_columnas = {
-    # A. Columnas Técnicas (Ocultas o Bloqueadas)
-    "created_at": None,   
-    "id": None,           
-    
-    # B. Renombrar encabezados (¡Nuevo!)
-    "sector": st.column_config.TextColumn("Sector", disabled=True), # Bloqueado y con Mayúscula
+    "created_at": None,
+    "id": None,
+
+    "sector": st.column_config.TextColumn("Sector", disabled=True),
     "subsector": st.column_config.TextColumn("Subsector"),
     "periodo": st.column_config.TextColumn("Periodo"),
     "sub_area": st.column_config.TextColumn("Sub Área"),
 
-    # C. Configuración de Fechas
     "fecha_elaboracion": st.column_config.DateColumn("Fecha Elaboración", format="DD/MM/YYYY"),
     "fecha_formato": st.column_config.DateColumn("Fecha Formato", format="DD/MM/YYYY"),
     "fecha_solicitud_modificacion": st.column_config.DateColumn("Fecha Sol. Modif.", format="DD/MM/YYYY"),
@@ -296,20 +303,15 @@ configuracion_columnas = {
     "fecha_conciliacion": st.column_config.DateColumn("Fecha Conciliación", format="DD/MM/YYYY"),
     "fecha_firma_ingenica": st.column_config.DateColumn("Firma Ingenica", format="DD/MM/YYYY"),
     "fecha_entrega_final_ingenica_central": st.column_config.DateColumn("Entrega Final Central", format="DD/MM/YYYY"),
-    "fecha_firma_dnds": st.column_config.DateColumn("Firma DNDS", format="DD/MM/YYYY", help="Si está vacía, se considera PENDIENTE"),
+    "fecha_firma_dnds": st.column_config.DateColumn("Firma DNDS", format="DD/MM/YYYY", help="(Opcional)"),
     "fecha_edicion_pedido": st.column_config.DateColumn("Fecha Edición Pedido", format="DD/MM/YYYY"),
 
-    # D. Listas Desplegables
     "area": st.column_config.SelectboxColumn(
         "Área",
         options=["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER", "CAMPAÑA", "PSSEN"]
     )
 }
 
-# (El resto del código sigue igual...)
-
-# Mostramos la tabla y guardamos el resultado en 'df_editado'
-# IMPORTANTE: Usamos 'df_editado' para que coincida con tu botón de guardar de abajo
 df_editado = st.data_editor(
     df_filtrado,
     column_config=configuracion_columnas,
@@ -317,16 +319,15 @@ df_editado = st.data_editor(
     num_rows="dynamic",
     key="editor_principal"
 )
-# --- Botón de Guardar (Versión Divide y Vencerás) ---
+
+# --- Guardar Cambios ---
 if st.button("Guardar Cambios en Supabase"):
     try:
-        # 1. Preparar los datos
         datos_a_enviar = df_editado.copy()
 
-        # 2. CONVERSIÓN DE FECHAS (Tu traductor que ya funciona)
         columnas_fechas_guardar = [
-            "fecha_elaboracion", "fecha_formato", "fecha_solicitud_modificacion", 
-            "fecha_entrega_post_modificacion", "fecha_conciliacion", 
+            "fecha_elaboracion", "fecha_formato", "fecha_solicitud_modificacion",
+            "fecha_entrega_post_modificacion", "fecha_conciliacion",
             "fecha_firma_ingenica", "fecha_entrega_final_ingenica_central",
             "fecha_firma_dnds", "fecha_edicion_pedido"
         ]
@@ -337,49 +338,39 @@ if st.button("Guardar Cambios en Supabase"):
                 datos_a_enviar[col] = datos_a_enviar[col].replace(['nan', 'NaT', 'None', '<NA>'], None)
                 datos_a_enviar[col] = datos_a_enviar[col].where(pd.notnull(datos_a_enviar[col]), None)
 
-        # 3. Convertir a lista de diccionarios
         registros = datos_a_enviar.to_dict('records')
-        
-        # 4. LIMPIEZA Y SEPARACIÓN (Aquí está el truco nuevo)
-        registros_actualizar = [] # Filas viejas (tienen ID)
-        registros_crear = []      # Filas nuevas (no tienen ID)
+
+        registros_actualizar = []
+        registros_crear = []
 
         for reg in registros:
             nuevo_reg = reg.copy()
             id_val = nuevo_reg.get('id')
-            
-            # Limpiamos created_at si está vacío
-            if pd.isna(nuevo_reg.get('created_at')):
-                if 'created_at' in nuevo_reg: del nuevo_reg['created_at']
 
-            # CLASIFICACIÓN: ¿Es nuevo o viejo?
+            if pd.isna(nuevo_reg.get('created_at')):
+                if 'created_at' in nuevo_reg:
+                    del nuevo_reg['created_at']
+
             if id_val is None or pd.isna(id_val) or str(id_val).strip() == "":
-                # ES NUEVO: Borramos el ID para que Supabase lo invente
-                if 'id' in nuevo_reg: del nuevo_reg['id']
+                if 'id' in nuevo_reg:
+                    del nuevo_reg['id']
                 registros_crear.append(nuevo_reg)
             else:
-                # ES VIEJO: Lo dejamos tal cual para actualizar
                 registros_actualizar.append(nuevo_reg)
 
-        # 5. ENVIAR POR SEPARADO
-        # A) Actualizamos los existentes (Upsert)
         if len(registros_actualizar) > 0:
             supabase.table('prefacturas_pedidos').upsert(registros_actualizar).execute()
-            
-        # B) Insertamos los nuevos (Insert)
+
         if len(registros_crear) > 0:
             supabase.table('prefacturas_pedidos').insert(registros_crear).execute()
-        
-        # 6. Éxito
+
         st.success("¡Cambios guardados correctamente!")
         st.balloons()
-        
-        # Recargar para ver los nuevos IDs asignados
-        # st.rerun() 
+        # st.rerun()
 
     except Exception as e:
         st.error(f"Error al guardar: {e}")
-        
+
 # --- EXPORTAR DATOS ---
 st.divider()
 csv = df_editado.to_csv(index=False).encode('utf-8')
@@ -388,8 +379,8 @@ st.download_button(
     data=csv,
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
-
 )
+
 
 
 

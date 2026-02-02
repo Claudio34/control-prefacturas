@@ -111,9 +111,10 @@ filtro_estado = st.sidebar.radio(
 # Creamos una copia de los datos para filtrar sin perder los originales
 df_filtrado = df.copy()
 
-# Filtro de Sector
+# Filtro de Sector (CORRECTO)
 if filtro_sector != "Todos":
-    df_filtrado = df_filtrado[df_filtrado['sector'] == filtro_sector]
+    df_filtrado = df_filtrado[df_filtrado[col_sector] == filtro_sector]
+
 
 # Filtro de Estado (Lógica corregida según tus indicaciones)
 if filtro_estado == "Pendientes de Elaborar":
@@ -361,6 +362,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

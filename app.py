@@ -6,6 +6,9 @@ from datetime import datetime
 # 1. Configuración de la página (Debe ser lo primero)
 st.set_page_config(page_title="PREFACTURAS", layout="wide")
 
+st.caption(f"Última actualización: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+
+
 # 2. Conexión a Supabase (Usa st.secrets en producción)
 # Por ahora pon tus llaves aquí para probar, luego las movemos a un archivo seguro
 URL = st.secrets["SUPABASE_URL"]
@@ -356,6 +359,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

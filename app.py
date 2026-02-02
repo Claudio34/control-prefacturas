@@ -194,7 +194,7 @@ st.markdown(f"""
   </div>
 
   <div class="pipe-card">
-    <div class="pipe-title">🧾 Etapa 1 · Elaborar
+    <div class="pipe-title">🧾 Etapa 1 · Por Elaborar
       <span class="badge" style="background:rgba(245,158,11,0.14); color:rgb(161,98,7);">{p1:.0%}</span>
     </div>
     <div class="pipe-value">{por_elaborar}</div>
@@ -203,7 +203,7 @@ st.markdown(f"""
   </div>
 
   <div class="pipe-card">
-    <div class="pipe-title">✅ Etapa 2 · Conciliar
+    <div class="pipe-title">✅ Etapa 2 · Por Conciliar
       <span class="badge" style="background:rgba(59,130,246,0.14); color:rgb(29,78,216);">{p2:.0%}</span>
     </div>
     <div class="pipe-value">{por_conciliar}</div>
@@ -212,7 +212,7 @@ st.markdown(f"""
   </div>
 
   <div class="pipe-card">
-    <div class="pipe-title">🧩 Etapa 3 · Pendiente de Pedido
+    <div class="pipe-title">🧩 Etapa 3 · Conciliada y sin Pedido
       <span class="badge" style="background:rgba(168,85,247,0.14); color:rgb(126,34,206);">{p3:.0%}</span>
     </div>
     <div class="pipe-value">{pendiente_pedido}</div>
@@ -380,6 +380,7 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
 
 
 

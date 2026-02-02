@@ -198,7 +198,7 @@ st.markdown(f"""
       <span class="badge" style="background:rgba(245,158,11,0.14); color:rgb(161,98,7);">{p1:.0%}</span>
     </div>
     <div class="pipe-value">{por_elaborar}</div>
-    <div class="pipe-sub">Sin <b>fecha_elaboracion</b></div>
+    <div class="pipe-sub">Sin Elaborar</div>
     <div class="pipe-bar"><span style="width:{p1*100:.0f}%; background:rgb(245,158,11)"></span></div>
   </div>
 
@@ -380,6 +380,7 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
 
 
 

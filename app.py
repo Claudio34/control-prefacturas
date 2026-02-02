@@ -20,6 +20,28 @@ supabase = init_connection()
 # 3. Título y Métricas Rápidas
 st.title("⚡ PREFACTURAS")
 
+st.markdown("""
+<style>
+.kpi-grid {display:flex; gap:14px; margin-top:10px; margin-bottom:8px;}
+.kpi-card {
+  flex:1; padding:16px 18px; border-radius:16px;
+  border:1px solid rgba(49,51,63,0.15);
+  background: rgba(255,255,255,0.65);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.kpi-title {font-size:0.85rem; color:#6b7280; font-weight:700; margin-bottom:6px; display:flex; gap:8px; align-items:center;}
+.kpi-value {font-size:2.1rem; font-weight:900; line-height:1.05; color:#111827;}
+.kpi-sub {margin-top:6px; font-size:0.85rem; color:#6b7280;}
+.kpi-chip {display:inline-block; padding:2px 10px; border-radius:999px; font-size:0.75rem; font-weight:800; margin-left:8px;}
+.kpi-bar {height:8px; background:rgba(15,23,42,0.08); border-radius:999px; overflow:hidden; margin-top:10px;}
+.kpi-bar > span {display:block; height:100%; border-radius:999px;}
+.small-muted {color:#6b7280; font-size:0.82rem;}
+</style>
+""", unsafe_allow_html=True)
+
+
+
+
 # Función para cargar datos
 def cargar_datos():
     response = supabase.table('prefacturas_pedidos').select("*").order('id').execute()
@@ -295,6 +317,7 @@ st.download_button(
     mime='text/csv',
 
 )
+
 
 
 

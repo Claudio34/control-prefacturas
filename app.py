@@ -26,7 +26,11 @@ supabase = init_connection()
 # 3) UI HEADER
 # =========================
 st.title("⚡ PREFACTURAS")
-st.caption(f"Última actualización: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+from datetime import datetime, timezone, timedelta
+
+tz_nic = timezone(timedelta(hours=-6))
+st.caption(f"Última actualización: {datetime.now(tz_nic).strftime('%d/%m/%Y %H:%M')}")
+
 
 # --- CSS para KPIs tipo pipeline ---
 st.markdown("""
@@ -454,6 +458,7 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
 
 
 

@@ -355,6 +355,20 @@ labels = base.transform_filter(alt.datum.Cantidad > 0).mark_text(
 st.altair_chart((barras + labels).properties(height=h), use_container_width=True)
 
 # =========================
+# LISTAS PARA COMBOBOX
+# =========================
+SECTORES = ["MANAGUA", "NORTE", "OCCIDENTE", "ORIENTE", "SUR"]
+
+SUBSECTORES = ["MANAGUA DN", "MANAGUA DS", "NORTE", "OCCIDENTE", "ORIENTE", "SUR"]
+
+MESES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+         "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]
+PERIODOS = [f"{m} 1Q" for m in MESES] + [f"{m} 2Q" for m in MESES]
+
+AREAS = ["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER", "CAMPAÑA", "PSSEN"]
+
+
+# =========================
 # 10) TABLE (df_filtrado)
 # =========================
 st.subheader("📝 Gestión de Datos")
@@ -363,9 +377,22 @@ configuracion_columnas = {
     "created_at": None,
     "id": None,
 
-    "sector": st.column_config.TextColumn("Sector", disabled=True),
-    "subsector": st.column_config.TextColumn("Subsector"),
-    "periodo": st.column_config.TextColumn("Periodo"),
+    "sector": st.column_config.SelectboxColumn(
+        "Sector",
+        options=[""] + SECTORES,
+        help="Selecciona el sector"
+    ),
+    "subsector": st.column_config.SelectboxColumn(
+        "Subsector",
+        options=[""] + SUBSECTORES,
+        help="Selecciona el subsector"
+    ),
+    "periodo": st.column_config.SelectboxColumn(
+        "Periodo",
+        options=[""] + PERIODOS,
+        help="Selecciona el periodo (mes + quincena)"
+    ),
+
     "sub_area": st.column_config.TextColumn("Sub Área"),
 
     "fecha_elaboracion": st.column_config.DateColumn("Fecha Elaboración", format="DD/MM/YYYY"),
@@ -380,9 +407,10 @@ configuracion_columnas = {
 
     "area": st.column_config.SelectboxColumn(
         "Área",
-        options=["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER", "CAMPAÑA", "PSSEN"]
+        options=[""] + AREAS
     )
 }
+
 
 df_editado = st.data_editor(
     df_filtrado,
@@ -458,6 +486,7 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
 
 
 

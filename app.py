@@ -96,6 +96,18 @@ for col in columnas_fechas:
     if col in df.columns:
         df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
 
+# --- Normalizar columnas tipo catálogo para que calcen con los combobox ---
+for col in ["sector", "subsector", "periodo", "area"]:
+    if col in df.columns:
+        df[col] = (
+            df[col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+
+
 # =========================
 # 5) HELPERS (CYCLE LOGIC)
 # =========================
@@ -173,7 +185,7 @@ filtro_sector = st.sidebar.selectbox("Seleccionar Sector:", lista_sectores)
 
 filtro_estado = st.sidebar.radio(
     "Mostrar solo:",
-    ["Ver Todo", "Pendientes de Elaborar", "Pendientes de Conciliar", "Pendientes de Pedido", "Pedidos Recibidos"]
+    ["Ver Todo", "1. Pendientes de Elaborar", "2. Pendientes de Conciliar", "3. Pendientes de Pedido", "4. Pedidos Recibidos"]
 )
 
 # =========================
@@ -412,12 +424,28 @@ configuracion_columnas = {
 }
 
 
+# --- Dataframe para el editor (sin índice visible) ---
+df_editor = df_filtrado.copy().reset_index(drop=True)
+
+# Asegurar columnas existen y normalizar para que calcen con los combobox
+for col in ["sector", "subsector", "periodo", "area"]:
+    if col not in df_editor.columns:
+        df_editor[col] = ""
+    df_editor[col] = (
+        df_editor[col]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
 df_editado = st.data_editor(
-    df_filtrado,
+    df_editor,
     column_config=configuracion_columnas,
+    hide_index=True,              # ✅ quita el índice (esa era tu “primera columna”)
     use_container_width=True,
     num_rows="dynamic",
-    key="editor_principal"
+    key="editor_principal_v2"     # ✅ cambia el key para forzar refresh y que aparezcan combos
 )
 
 # =========================
@@ -486,6 +514,7 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
 
 
 

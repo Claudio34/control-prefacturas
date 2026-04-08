@@ -526,6 +526,8 @@ if st.button("Guardar Cambios en Supabase"):
 
         st.success("¡Cambios guardados correctamente!")
         st.balloons()
+        import time
+        time.sleep(2)  # Espera 2 segundos para que se vean los globos
         st.rerun()
 
     except Exception as e:

@@ -449,12 +449,15 @@ df_editado = st.data_editor(
 )
 
 # =========================
-# 11) SAVE CHANGES
+
+# =========================
+# 11) SAVE CHANGES (CORREGIDO)
 # =========================
 if st.button("Guardar Cambios en Supabase"):
     try:
         datos_a_enviar = df_editado.copy()
 
+        # --- 1) Limpiar fechas ---
         columnas_fechas_guardar = [
             "fecha_elaboracion", "fecha_formato", "fecha_solicitud_modificacion",
             "fecha_entrega_post_modificacion", "fecha_conciliacion",
@@ -465,31 +468,56 @@ if st.button("Guardar Cambios en Supabase"):
         for col in columnas_fechas_guardar:
             if col in datos_a_enviar.columns:
                 datos_a_enviar[col] = pd.to_datetime(datos_a_enviar[col], dayfirst=True, errors='coerce').dt.strftime('%Y-%m-%d')
-                datos_a_enviar[col] = datos_a_enviar[col].replace(['nan', 'NaT', 'None', '<NA>'], None)
-                datos_a_enviar[col] = datos_a_enviar[col].where(pd.notnull(datos_a_enviar[col]), None)
 
+        # --- 2) CORRECCIÓN PRINCIPAL: Limpiar TODOS los NaN/NaT/inf del DataFrame ---
+        # Reemplazar NaN, NaT, inf, -inf por None en TODO el dataframe
+        datos_a_enviar = datos_a_enviar.replace({
+            np.nan: None, 
+            pd.NaT: None, 
+            float('inf'): None, 
+            float('-inf'): None
+        })
+        
+        # También asegurar que cualquier string 'nan', 'NaT', 'None' quede como None
+        datos_a_enviar = datos_a_enviar.replace(['nan', 'NaT', 'None', '<NA>', ''], None)
+
+        # --- 3) Convertir a diccionario (ahora sin valores nan) ---
         registros = datos_a_enviar.to_dict('records')
 
         registros_actualizar = []
         registros_crear = []
 
         for reg in registros:
-            nuevo_reg = reg.copy()
+            nuevo_reg = {}
+            
+            # Limpiar campo por campo para asegurar que no quede ningún nan
+            for key, value in reg.items():
+                # Si es nan (float), convertir a None
+                if isinstance(value, float) and np.isnan(value):
+                    nuevo_reg[key] = None
+                # Si es lista o dict, verificar recursivamente (por si acaso)
+                else:
+                    nuevo_reg[key] = value
+
+            # Manejar el ID para distinguir insert vs update
             id_val = nuevo_reg.get('id')
+            
+            # Limpiar created_at si está vacío
+            if 'created_at' in nuevo_reg and (nuevo_reg['created_at'] is None or nuevo_reg['created_at'] == ''):
+                del nuevo_reg['created_at']
 
-            # limpiar created_at vacío
-            if pd.isna(nuevo_reg.get('created_at')):
-                if 'created_at' in nuevo_reg:
-                    del nuevo_reg['created_at']
-
-            # clasificar nuevo vs existente
-            if id_val is None or pd.isna(id_val) or str(id_val).strip() == "":
+            # Clasificar
+            if id_val is None or id_val == '' or (isinstance(id_val, float) and np.isnan(id_val)):
                 if 'id' in nuevo_reg:
                     del nuevo_reg['id']
                 registros_crear.append(nuevo_reg)
             else:
+                # Asegurar que el ID sea entero (no float)
+                if isinstance(id_val, float):
+                    nuevo_reg['id'] = int(id_val)
                 registros_actualizar.append(nuevo_reg)
 
+        # --- 4) Ejecutar operaciones en Supabase ---
         if len(registros_actualizar) > 0:
             supabase.table('prefacturas_pedidos').upsert(registros_actualizar).execute()
 
@@ -498,10 +526,12 @@ if st.button("Guardar Cambios en Supabase"):
 
         st.success("¡Cambios guardados correctamente!")
         st.balloons()
-        # st.rerun()
+        st.rerun()
 
     except Exception as e:
         st.error(f"Error al guardar: {e}")
+        import traceback
+        st.code(traceback.format_exc())  # Muestra el detalle completo del error para debug
 
 # =========================
 # 12) EXPORT CSV

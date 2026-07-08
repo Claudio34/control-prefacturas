@@ -117,7 +117,7 @@ for col in columnas_fechas:
         df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
 
 # --- Normalizar columnas tipo catálogo para que calcen con los combobox ---
-for col in ["sector", "subsector", "periodo", "area"]:
+for col in ["sector", "subsector", "periodo", "area", "sub_area"]:
     if col in df.columns:
         df[col] = (
             df[col]
@@ -247,6 +247,12 @@ periodos_en_datos = df['periodo'].dropna().unique().tolist() if 'periodo' in df.
 lista_periodos = ["Todos"] + [p for p in PERIODOS if p in periodos_en_datos]
 filtro_periodo = st.sidebar.selectbox("Seleccionar Periodo:", lista_periodos)
 
+lista_areas = ["Todos"] + sorted(df['area'].dropna().unique().tolist()) if 'area' in df.columns else ["Todos"]
+filtro_area = st.sidebar.selectbox("Seleccionar Área:", lista_areas)
+
+lista_subareas = ["Todos"] + sorted([s for s in df['sub_area'].dropna().unique().tolist() if s != ""]) if 'sub_area' in df.columns else ["Todos"]
+filtro_subarea = st.sidebar.selectbox("Seleccionar Sub Área:", lista_subareas)
+
 filtro_estado = st.sidebar.radio(
     "Mostrar solo:",
     ["Ver Todo", "1. Pendientes de Elaborar", "2. Pendientes de Conciliar", "3. Pendientes de Pedido", "4. Pedidos Recibidos"]
@@ -255,14 +261,18 @@ filtro_estado = st.sidebar.radio(
 # =========================
 # 7) DATASETS (IMPORTANT!)
 # =========================
-# df_sector: filtro de sector + periodo
+# df_sector: filtro de sector + periodo + área + subárea
 df_sector = df.copy()
 if filtro_sector != "Todos":
     df_sector = df_sector[df_sector["sector"] == filtro_sector]
 if filtro_periodo != "Todos" and 'periodo' in df_sector.columns:
     df_sector = df_sector[df_sector["periodo"] == filtro_periodo]
+if filtro_area != "Todos" and 'area' in df_sector.columns:
+    df_sector = df_sector[df_sector["area"] == filtro_area]
+if filtro_subarea != "Todos" and 'sub_area' in df_sector.columns:
+    df_sector = df_sector[df_sector["sub_area"] == filtro_subarea]
 
-# df_vista: sector + periodo + estado (lo que seleccionó el usuario)
+# df_vista: sector + periodo + área + subárea + estado (lo que seleccionó el usuario)
 df_vista = aplicar_filtro_estado(df_sector, filtro_estado)
 
 # df_tablero: lo que usan KPIs + gráfico (aquí SÍ cambian con el radio)

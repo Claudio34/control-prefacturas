@@ -49,6 +49,14 @@ st.markdown("""
 .pipe-bar span{display:block; height:100%; border-radius:999px;}
 .badge{display:inline-block; padding:2px 10px; border-radius:999px; font-size:.75rem; font-weight:900;}
 .small-muted{color:#6b7280; font-size:.82rem; margin-top:4px;}
+/* Tarjeta destacada (Importe Real): colores fijos para que se lea igual en tema claro u oscuro */
+.pipe-card.pipe-highlight{
+  background:#ecfdf5 !important;
+  border:1px solid rgba(16,185,129,0.45) !important;
+}
+.pipe-card.pipe-highlight .pipe-title{ color:#047857 !important; }
+.pipe-card.pipe-highlight .pipe-value{ color:#065f46 !important; }
+.pipe-card.pipe-highlight .pipe-sub{ color:#059669 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -310,7 +318,7 @@ st.markdown(f"""
     <div class="pipe-sub">Registros (según filtros)</div>
     <div class="pipe-bar"><span style="width:100%; background:rgb(37,99,235)"></span></div>
   </div>
-  <div class="pipe-card" style="border:1px solid rgba(16,185,129,0.35); background: rgba(16,185,129,0.07);">
+  <div class="pipe-card pipe-highlight">
     <div class="pipe-title">💰 Importe Real a Facturar
       <span class="badge" style="background:rgba(16,185,129,0.14); color:rgb(4,120,87);">Total</span>
     </div>

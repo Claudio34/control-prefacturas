@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 from supabase import create_client
@@ -104,6 +105,10 @@ for col in ["sector", "subsector", "periodo", "area"]:
             .str.strip()
             .str.upper()
         )
+ 
+# --- Convertir importe_real a numérico (el importe real a facturar) ---
+if 'importe_real' in df.columns:
+    df['importe_real'] = pd.to_numeric(df['importe_real'], errors='coerce').fillna(0)
  
 # =========================
 # 5) HELPERS (CYCLE LOGIC)
@@ -247,6 +252,8 @@ pedido_recibido = (
  
 sin_clasificar = max(0, kpi_total - (por_elaborar + por_conciliar + pendiente_pedido + pedido_recibido))
  
+total_importe_real = df_tablero['importe_real'].sum() if 'importe_real' in df_tablero.columns else 0
+ 
 def pct(n, d):
     return (n / d) if d else 0
  
@@ -266,6 +273,14 @@ st.markdown(f"""
     <div class="pipe-value">{kpi_total}</div>
     <div class="pipe-sub">Registros (según filtros)</div>
     <div class="pipe-bar"><span style="width:100%; background:rgb(37,99,235)"></span></div>
+  </div>
+  <div class="pipe-card" style="border:1px solid rgba(16,185,129,0.35); background: rgba(16,185,129,0.07);">
+    <div class="pipe-title">💰 Importe Real a Facturar
+      <span class="badge" style="background:rgba(16,185,129,0.14); color:rgb(4,120,87);">Total</span>
+    </div>
+    <div class="pipe-value">C$ {total_importe_real:,.2f}</div>
+    <div class="pipe-sub">Suma según filtros aplicados</div>
+    <div class="pipe-bar"><span style="width:100%; background:rgb(16,185,129)"></span></div>
   </div>
   <div class="pipe-card">
     <div class="pipe-title">🧾 Etapa 1 · Por Elaborar
@@ -531,3 +546,4 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+ 

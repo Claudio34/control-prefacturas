@@ -5,24 +5,24 @@ from supabase import create_client
 from datetime import datetime
 import altair as alt
 import numpy as np
- 
+
 # =========================
 # 1) PAGE CONFIG
 # =========================
 st.set_page_config(page_title="PREFACTURAS", layout="wide")
- 
+
 # =========================
 # 2) SUPABASE CONNECTION
 # =========================
 URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
- 
+
 @st.cache_resource
 def init_connection():
     return create_client(URL, KEY)
- 
+
 supabase = init_connection()
- 
+
 # =========================
 # 3) UI HEADER
 # =========================
@@ -30,7 +30,7 @@ st.title("⚡ PREFACTURAS")
 from datetime import datetime, timezone, timedelta
 tz_nic = timezone(timedelta(hours=-6))
 st.caption(f"Última actualización: {datetime.now(tz_nic).strftime('%d/%m/%Y %H:%M')}")
- 
+
 # --- CSS para KPIs tipo pipeline ---
 st.markdown("""
 <style>
@@ -51,20 +51,20 @@ st.markdown("""
 .small-muted{color:#6b7280; font-size:.82rem; margin-top:4px;}
 </style>
 """, unsafe_allow_html=True)
- 
+
 # =========================
 # 4) LOAD DATA
 # =========================
 def cargar_datos():
     response = supabase.table('prefacturas_pedidos').select("*").order('id').execute()
     return pd.DataFrame(response.data)
- 
+
 df = cargar_datos()
- 
+
 if df.empty:
     st.warning("⚠️ No se han cargado datos. Revisa tu conexión a Supabase.")
     st.stop()
- 
+
 # --- Normalizar nombres de columnas ---
 rename_map = {}
 if 'Sector' in df.columns and 'sector' not in df.columns:
@@ -73,12 +73,12 @@ if 'Subsector' in df.columns and 'subsector' not in df.columns:
     rename_map['Subsector'] = 'subsector'
 if rename_map:
     df = df.rename(columns=rename_map)
- 
+
 # --- Validaciones mínimas ---
 if 'sector' not in df.columns:
     st.error("❌ No encuentro la columna 'sector'. Columnas detectadas: " + str(df.columns.tolist()))
     st.stop()
- 
+
 # --- Convertir texto a fechas reales ---
 columnas_fechas = [
     "fecha_elaboracion",
@@ -94,7 +94,7 @@ columnas_fechas = [
 for col in columnas_fechas:
     if col in df.columns:
         df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
- 
+
 # --- Normalizar columnas tipo catálogo para que calcen con los combobox ---
 for col in ["sector", "subsector", "periodo", "area"]:
     if col in df.columns:
@@ -105,11 +105,11 @@ for col in ["sector", "subsector", "periodo", "area"]:
             .str.strip()
             .str.upper()
         )
- 
+
 # --- Convertir importe_real a numérico (el importe real a facturar) ---
 if 'importe_real' in df.columns:
     df['importe_real'] = pd.to_numeric(df['importe_real'], errors='coerce').fillna(0)
- 
+
 # =========================
 # 5) HELPERS (CYCLE LOGIC)
 # =========================
@@ -118,51 +118,51 @@ def serie_pedido_lleno(df_in: pd.DataFrame) -> pd.Series:
     if 'pedido' not in df_in.columns:
         return pd.Series([False] * len(df_in), index=df_in.index)
     return df_in['pedido'].fillna('').astype(str).str.strip().ne('')
- 
+
 def aplicar_filtro_estado(df_in: pd.DataFrame, estado: str) -> pd.DataFrame:
     """Filtra el dataframe según el estado seleccionado del ciclo."""
     if estado == "Ver Todo":
         return df_in
- 
+
     # Si faltan columnas críticas, no filtre y avise
     for c in ["fecha_elaboracion", "fecha_conciliacion"]:
         if c not in df_in.columns:
             st.warning(f"⚠️ Falta la columna '{c}'. No se aplicó el filtro de estado.")
             return df_in
- 
+
     pedido_lleno = serie_pedido_lleno(df_in)
- 
+
     if estado == "Pendientes de Elaborar":
         return df_in[df_in['fecha_elaboracion'].isnull()]
- 
+
     if estado == "Pendientes de Conciliar":
         return df_in[
             df_in['fecha_elaboracion'].notnull() &
             df_in['fecha_conciliacion'].isnull()
         ]
- 
+
     if estado == "Pendientes de Pedido":
         return df_in[
             df_in['fecha_conciliacion'].notnull() &
             (~pedido_lleno)
         ]
- 
+
     if estado == "Pedidos Recibidos":
         return df_in[
             df_in['fecha_conciliacion'].notnull() &
             (pedido_lleno)
         ]
- 
+
     return df_in
- 
+
 def etapa_excluyente(df_in: pd.DataFrame) -> pd.Series:
     """Devuelve etapa por fila (excluyente) según ciclo."""
     pedido_lleno = serie_pedido_lleno(df_in)
- 
+
     # Si faltan columnas, no romper
     if 'fecha_elaboracion' not in df_in.columns or 'fecha_conciliacion' not in df_in.columns:
         return pd.Series(["Sin clasificar"] * len(df_in), index=df_in.index)
- 
+
     conds = [
         df_in['fecha_elaboracion'].isnull(),
         df_in['fecha_elaboracion'].notnull() & df_in['fecha_conciliacion'].isnull(),
@@ -176,7 +176,7 @@ def etapa_excluyente(df_in: pd.DataFrame) -> pd.Series:
         "Pedido Recibido",
     ]
     return pd.Series(np.select(conds, etapas, default="Sin clasificar"), index=df_in.index)
- 
+
 # =========================
 # LISTAS PARA COMBOBOX
 # =========================
@@ -186,25 +186,25 @@ MESES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
          "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]
 PERIODOS = [f"{m} 1Q" for m in MESES] + [f"{m} 2Q" for m in MESES]
 AREAS = ["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER", "CAMPAÑA", "PSSEN"]
- 
+
 # =========================
 # 6) SIDEBAR FILTERS
 # =========================
 st.sidebar.header("🎯 Filtros de Gestión")
- 
+
 lista_sectores = ["Todos"] + sorted(df['sector'].dropna().unique().tolist())
 filtro_sector = st.sidebar.selectbox("Seleccionar Sector:", lista_sectores)
- 
+
 # Periodos presentes en los datos, ordenados cronológicamente (no alfabético)
 periodos_en_datos = df['periodo'].dropna().unique().tolist() if 'periodo' in df.columns else []
 lista_periodos = ["Todos"] + [p for p in PERIODOS if p in periodos_en_datos]
 filtro_periodo = st.sidebar.selectbox("Seleccionar Periodo:", lista_periodos)
- 
+
 filtro_estado = st.sidebar.radio(
     "Mostrar solo:",
     ["Ver Todo", "1. Pendientes de Elaborar", "2. Pendientes de Conciliar", "3. Pendientes de Pedido", "4. Pedidos Recibidos"]
 )
- 
+
 # =========================
 # 7) DATASETS (IMPORTANT!)
 # =========================
@@ -214,16 +214,16 @@ if filtro_sector != "Todos":
     df_sector = df_sector[df_sector["sector"] == filtro_sector]
 if filtro_periodo != "Todos" and 'periodo' in df_sector.columns:
     df_sector = df_sector[df_sector["periodo"] == filtro_periodo]
- 
+
 # df_vista: sector + periodo + estado (lo que seleccionó el usuario)
 df_vista = aplicar_filtro_estado(df_sector, filtro_estado)
- 
+
 # df_tablero: lo que usan KPIs + gráfico (aquí SÍ cambian con el radio)
 df_tablero = df_vista
- 
+
 # df_filtrado: lo que usa la tabla (igual df_vista)
 df_filtrado = df_vista
- 
+
 # =========================
 # 8) KPIs / PIPELINE (df_tablero)
 # =========================
@@ -232,10 +232,10 @@ if filtro_periodo != "Todos":
     titulo_tablero += f" — {filtro_periodo}"
 st.header(titulo_tablero)
 st.caption(f"Vista: {filtro_estado} | Registros: {len(df_tablero)}")
- 
+
 kpi_total = len(df_tablero)
 pedido_lleno = serie_pedido_lleno(df_tablero)
- 
+
 por_elaborar = df_tablero['fecha_elaboracion'].isnull().sum() if 'fecha_elaboracion' in df_tablero.columns else 0
 por_conciliar = (
     df_tablero['fecha_elaboracion'].notnull() &
@@ -249,21 +249,21 @@ pedido_recibido = (
     df_tablero['fecha_conciliacion'].notnull() &
     (pedido_lleno)
 ).sum() if 'fecha_conciliacion' in df_tablero.columns else 0
- 
+
 sin_clasificar = max(0, kpi_total - (por_elaborar + por_conciliar + pendiente_pedido + pedido_recibido))
- 
+
 total_importe_real = df_tablero['importe_real'].sum() if 'importe_real' in df_tablero.columns else 0
- 
+
 def pct(n, d):
     return (n / d) if d else 0
- 
+
 p1, p2, p3, p4 = (
     pct(por_elaborar, kpi_total),
     pct(por_conciliar, kpi_total),
     pct(pendiente_pedido, kpi_total),
     pct(pedido_recibido, kpi_total),
 )
- 
+
 st.markdown(f"""
 <div class="pipe-wrap">
   <div class="pipe-card">
@@ -316,20 +316,20 @@ st.markdown(f"""
   </div>
 </div>
 """, unsafe_allow_html=True)
- 
+
 if sin_clasificar > 0:
     st.warning(f"⚠️ Hay {sin_clasificar} registros 'Sin clasificar' (revisa fechas/pedido).")
- 
+
 st.divider()
- 
+
 # =========================
 # 9) STACKED CHART (df_tablero)
 # =========================
 st.subheader("📊 Distribución de la Carga (por etapa)")
- 
+
 df_g = df_tablero.copy()
 df_g['Etapa'] = etapa_excluyente(df_g)
- 
+
 # Cuando hay sector seleccionado => SIEMPRE por subsector (para visualizar Managua DN/DS)
 if filtro_sector != "Todos" and 'subsector' in df_g.columns:
     col_categoria = 'subsector'
@@ -337,7 +337,7 @@ if filtro_sector != "Todos" and 'subsector' in df_g.columns:
 else:
     col_categoria = 'sector'
     etiqueta = 'Sector'
- 
+
 # Categoria limpia (fallback: si subsector vacío, usa sector)
 cat = df_g[col_categoria].fillna('').astype(str).str.strip() if col_categoria in df_g.columns else pd.Series([''] * len(df_g))
 if col_categoria == 'subsector':
@@ -345,22 +345,22 @@ if col_categoria == 'subsector':
     df_g['Categoria'] = np.where(cat != '', cat, cat_sector)
 else:
     df_g['Categoria'] = np.where(cat != '', cat, 'Sin dato')
- 
+
 resumen = (
     df_g.groupby(['Categoria', 'Etapa'], as_index=False)
         .size()
         .rename(columns={'size': 'Cantidad'})
 )
- 
+
 tot_cat = resumen.groupby('Categoria', as_index=False)['Cantidad'].sum().rename(columns={'Cantidad': 'TotalCategoria'})
 resumen = resumen.merge(tot_cat, on='Categoria', how='left')
- 
+
 orden_etapas = ["1. Por Elaborar", "2. Por Conciliar", "3. Pendiente de Pedido", "4. Pedido Recibido"]
 if (resumen['Etapa'] == "Sin clasificar").any():
     orden_etapas = orden_etapas + ["Sin clasificar"]
- 
+
 h = max(260, min(520, 60 + 30 * resumen['Categoria'].nunique()))
- 
+
 base = alt.Chart(resumen).encode(
     y=alt.Y('Categoria:N', sort=alt.SortField(field='TotalCategoria', order='descending'), title=etiqueta),
     x=alt.X('Cantidad:Q', stack='zero', title='Nº Prefacturas'),
@@ -380,19 +380,19 @@ base = alt.Chart(resumen).encode(
         alt.Tooltip('TotalCategoria:Q', title='Total categoría'),
     ]
 )
- 
+
 barras = base.mark_bar(size=26, cornerRadius=6, stroke='rgba(0,0,0,0.25)', strokeWidth=1)
 labels = base.transform_filter(alt.datum.Cantidad > 0).mark_text(
     align='left', baseline='middle', dx=6, fontSize=12
 ).encode(text='Cantidad:Q')
- 
+
 st.altair_chart((barras + labels).properties(height=h), use_container_width=True)
- 
+
 # =========================
 # 10) TABLE (df_filtrado)
 # =========================
 st.subheader("📝 Gestión de Datos")
- 
+
 configuracion_columnas = {
     "created_at": None,
     "id": None,
@@ -426,10 +426,10 @@ configuracion_columnas = {
         options=[""] + AREAS
     )
 }
- 
+
 # --- Dataframe para el editor (sin índice visible) ---
 df_editor = df_filtrado.copy().reset_index(drop=True)
- 
+
 # Asegurar columnas existen y normalizar para que calcen con los combobox
 for col in ["sector", "subsector", "periodo", "area"]:
     if col not in df_editor.columns:
@@ -441,7 +441,7 @@ for col in ["sector", "subsector", "periodo", "area"]:
         .str.strip()
         .str.upper()
     )
- 
+
 df_editado = st.data_editor(
     df_editor,
     column_config=configuracion_columnas,
@@ -450,14 +450,14 @@ df_editado = st.data_editor(
     num_rows="dynamic",
     key="editor_principal_v2"     # ✅ cambia el key para forzar refresh y que aparezcan combos
 )
- 
+
 # =========================
 # 11) SAVE CHANGES (CORREGIDO)
 # =========================
 if st.button("Guardar Cambios en Supabase"):
     try:
         datos_a_enviar = df_editado.copy()
- 
+
         # --- 1) Limpiar fechas ---
         columnas_fechas_guardar = [
             "fecha_elaboracion", "fecha_formato", "fecha_solicitud_modificacion",
@@ -468,7 +468,7 @@ if st.button("Guardar Cambios en Supabase"):
         for col in columnas_fechas_guardar:
             if col in datos_a_enviar.columns:
                 datos_a_enviar[col] = pd.to_datetime(datos_a_enviar[col], dayfirst=True, errors='coerce').dt.strftime('%Y-%m-%d')
- 
+
         # --- 2) CORRECCIÓN PRINCIPAL: Limpiar TODOS los NaN/NaT/inf del DataFrame ---
         # Reemplazar NaN, NaT, inf, -inf por None en TODO el dataframe
         datos_a_enviar = datos_a_enviar.replace({
@@ -477,19 +477,19 @@ if st.button("Guardar Cambios en Supabase"):
             float('inf'): None,
             float('-inf'): None
         })
- 
+
         # También asegurar que cualquier string 'nan', 'NaT', 'None' quede como None
         datos_a_enviar = datos_a_enviar.replace(['nan', 'NaT', 'None', '<NA>', ''], None)
- 
+
         # --- 3) Convertir a diccionario (ahora sin valores nan) ---
         registros = datos_a_enviar.to_dict('records')
- 
+
         registros_actualizar = []
         registros_crear = []
- 
+
         for reg in registros:
             nuevo_reg = {}
- 
+
             # Limpiar campo por campo para asegurar que no quede ningún nan
             for key, value in reg.items():
                 # Si es nan (float), convertir a None
@@ -498,14 +498,14 @@ if st.button("Guardar Cambios en Supabase"):
                 # Si es lista o dict, verificar recursivamente (por si acaso)
                 else:
                     nuevo_reg[key] = value
- 
+
             # Manejar el ID para distinguir insert vs update
             id_val = nuevo_reg.get('id')
- 
+
             # Limpiar created_at si está vacío
             if 'created_at' in nuevo_reg and (nuevo_reg['created_at'] is None or nuevo_reg['created_at'] == ''):
                 del nuevo_reg['created_at']
- 
+
             # Clasificar
             if id_val is None or id_val == '' or (isinstance(id_val, float) and np.isnan(id_val)):
                 if 'id' in nuevo_reg:
@@ -516,25 +516,25 @@ if st.button("Guardar Cambios en Supabase"):
                 if isinstance(id_val, float):
                     nuevo_reg['id'] = int(id_val)
                 registros_actualizar.append(nuevo_reg)
- 
+
         # --- 4) Ejecutar operaciones en Supabase ---
         if len(registros_actualizar) > 0:
             supabase.table('prefacturas_pedidos').upsert(registros_actualizar).execute()
- 
+
         if len(registros_crear) > 0:
             supabase.table('prefacturas_pedidos').insert(registros_crear).execute()
- 
+
         st.success("¡Cambios guardados correctamente!")
         st.balloons()
         import time
         time.sleep(2)  # Espera 2 segundos para que se vean los globos
         st.rerun()
- 
+
     except Exception as e:
         st.error(f"Error al guardar: {e}")
         import traceback
         st.code(traceback.format_exc())  # Muestra el detalle completo del error para debug
- 
+
 # =========================
 # 12) EXPORT CSV
 # =========================
@@ -546,4 +546,3 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
- 

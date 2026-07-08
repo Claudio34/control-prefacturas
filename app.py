@@ -424,6 +424,58 @@ labels = base.transform_filter(alt.datum.Cantidad > 0).mark_text(
 
 st.altair_chart((barras + labels).properties(height=h), use_container_width=True)
 
+st.divider()
+
+# =========================
+# 9b) CHART: IMPORTE REAL POR SECTOR/SUBSECTOR
+# =========================
+st.subheader("💰 Importe Real por Sector")
+
+if 'importe_real' in df_tablero.columns:
+    df_imp = df_tablero.copy()
+
+    # Misma lógica de categoría que el gráfico anterior (subsector si hay sector elegido)
+    if filtro_sector != "Todos" and 'subsector' in df_imp.columns:
+        col_cat_imp = 'subsector'
+        etiqueta_imp = 'Subsector'
+    else:
+        col_cat_imp = 'sector'
+        etiqueta_imp = 'Sector'
+
+    cat_imp = df_imp[col_cat_imp].fillna('').astype(str).str.strip() if col_cat_imp in df_imp.columns else pd.Series([''] * len(df_imp))
+    if col_cat_imp == 'subsector':
+        cat_sector_imp = df_imp['sector'].fillna('Sin dato').astype(str).str.strip()
+        df_imp['Categoria'] = np.where(cat_imp != '', cat_imp, cat_sector_imp)
+    else:
+        df_imp['Categoria'] = np.where(cat_imp != '', cat_imp, 'Sin dato')
+
+    resumen_imp = (
+        df_imp.groupby('Categoria', as_index=False)['importe_real']
+        .sum()
+        .rename(columns={'importe_real': 'Importe'})
+    )
+
+    if resumen_imp.empty or resumen_imp['Importe'].sum() == 0:
+        st.info("No hay montos de importe real para los filtros seleccionados.")
+    else:
+        h_imp = max(220, min(480, 60 + 30 * resumen_imp['Categoria'].nunique()))
+
+        base_imp = alt.Chart(resumen_imp).encode(
+            y=alt.Y('Categoria:N', sort='-x', title=etiqueta_imp),
+            x=alt.X('Importe:Q', title='Importe Real (C$)'),
+            tooltip=[
+                alt.Tooltip('Categoria:N', title=etiqueta_imp),
+                alt.Tooltip('Importe:Q', title='Importe Real', format=',.2f'),
+            ]
+        )
+        barras_imp = base_imp.mark_bar(cornerRadius=6, color="#10B981", stroke='rgba(0,0,0,0.25)', strokeWidth=1)
+        labels_imp = base_imp.mark_text(align='left', baseline='middle', dx=6, fontSize=12).encode(
+            text=alt.Text('Importe:Q', format=',.2f')
+        )
+        st.altair_chart((barras_imp + labels_imp).properties(height=h_imp), use_container_width=True)
+else:
+    st.info("No se encontró la columna 'importe_real' para graficar.")
+
 # =========================
 # 10) TABLE (df_filtrado)
 # =========================

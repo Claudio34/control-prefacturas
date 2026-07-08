@@ -82,11 +82,14 @@ if 'Subsector' in df.columns and 'subsector' not in df.columns:
 
 # Buscar la columna de "Importe Real" sin importar mayúsculas/espacios/guiones bajos
 # (en Supabase puede estar como "Importe Real", "importe_real", "IMPORTE REAL", etc.)
-if 'importe_real' not in df.columns:
+# Guardamos el nombre ORIGINAL para poder revertir el rename al guardar en Supabase.
+IMPORTE_REAL_COL_ORIGINAL = 'importe_real' if 'importe_real' in df.columns else None
+if IMPORTE_REAL_COL_ORIGINAL is None:
     for c in df.columns:
         c_norm = c.strip().lower().replace(' ', '').replace('_', '')
         if c_norm == 'importereal':
             rename_map[c] = 'importe_real'
+            IMPORTE_REAL_COL_ORIGINAL = c
             break
 
 if rename_map:
@@ -576,6 +579,15 @@ if st.button("Guardar Cambios en Supabase"):
 
         # También asegurar que cualquier string 'nan', 'NaT', 'None' quede como None
         datos_a_enviar = datos_a_enviar.replace(['nan', 'NaT', 'None', '<NA>', ''], None)
+
+        # --- 2b) Revertir el nombre de la columna 'importe_real' al nombre REAL en Supabase ---
+        # (internamente usamos 'importe_real' aunque en la tabla tenga otro nombre/mayúsculas)
+        if (
+            IMPORTE_REAL_COL_ORIGINAL
+            and IMPORTE_REAL_COL_ORIGINAL != 'importe_real'
+            and 'importe_real' in datos_a_enviar.columns
+        ):
+            datos_a_enviar = datos_a_enviar.rename(columns={'importe_real': IMPORTE_REAL_COL_ORIGINAL})
 
         # --- 3) Convertir a diccionario (ahora sin valores nan) ---
         registros = datos_a_enviar.to_dict('records')

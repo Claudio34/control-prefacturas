@@ -1,10 +1,10 @@
-
 import streamlit as st
 import pandas as pd
 from supabase import create_client
 from datetime import datetime
 import altair as alt
 import numpy as np
+import re
 
 # =========================
 # 1) PAGE CONFIG
@@ -71,6 +71,16 @@ if 'Sector' in df.columns and 'sector' not in df.columns:
     rename_map['Sector'] = 'sector'
 if 'Subsector' in df.columns and 'subsector' not in df.columns:
     rename_map['Subsector'] = 'subsector'
+
+# Buscar la columna de "Importe Real" sin importar mayúsculas/espacios/guiones bajos
+# (en Supabase puede estar como "Importe Real", "importe_real", "IMPORTE REAL", etc.)
+if 'importe_real' not in df.columns:
+    for c in df.columns:
+        c_norm = c.strip().lower().replace(' ', '').replace('_', '')
+        if c_norm == 'importereal':
+            rename_map[c] = 'importe_real'
+            break
+
 if rename_map:
     df = df.rename(columns=rename_map)
 
@@ -107,8 +117,34 @@ for col in ["sector", "subsector", "periodo", "area"]:
         )
 
 # --- Convertir importe_real a numérico (el importe real a facturar) ---
+def parse_importe(valor):
+    """Convierte a float aceptando formatos como 198474.04, 198,474.04, 198.474,04, 'C$198474.04', None, etc."""
+    if valor is None:
+        return 0.0
+    if isinstance(valor, (int, float)):
+        return float(valor) if not pd.isna(valor) else 0.0
+    s = str(valor).strip()
+    if s == '' or s.lower() in ('none', 'nan', 'nat'):
+        return 0.0
+    s = re.sub(r'[^0-9,.\-]', '', s)  # quita símbolos de moneda, espacios, letras
+    if ',' in s and '.' in s:
+        if s.rfind(',') > s.rfind('.'):
+            # coma es el separador decimal (formato latino: 198.474,04)
+            s = s.replace('.', '').replace(',', '.')
+        else:
+            # punto es el separador decimal (formato US: 198,474.04)
+            s = s.replace(',', '')
+    elif ',' in s:
+        # solo coma: decide si es decimal o miles según cantidad de dígitos tras la última coma
+        partes = s.split(',')
+        s = s.replace(',', '.') if len(partes[-1]) in (1, 2) else s.replace(',', '')
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
 if 'importe_real' in df.columns:
-    df['importe_real'] = pd.to_numeric(df['importe_real'], errors='coerce').fillna(0)
+    df['importe_real'] = df['importe_real'].apply(parse_importe)
 
 # =========================
 # 5) HELPERS (CYCLE LOGIC)

@@ -760,6 +760,14 @@ if st.button("Guardar Cambios en Supabase"):
         # --- 3) Convertir a diccionario (ahora sin valores nan) ---
         registros = datos_a_enviar.to_dict('records')
 
+        # Columnas que en Supabase son de tipo INTEGER de verdad. Si se envían como
+        # float (p.ej. 10.0 en vez de 10), Postgres las rechaza con
+        # "invalid input syntax for type integer: '10.0'" porque el valor viaja como
+        # texto con decimal. pandas convierte estas columnas a float automáticamente
+        # en cuanto tienen algún valor vacío/None mezclado, así que hay que forzarlas
+        # de vuelta a int (o None) justo antes de enviarlas.
+        COLUMNAS_ENTERAS_SUPABASE = {"Previsto N Datos"}
+
         registros_actualizar = []
         registros_crear = []
 
@@ -771,9 +779,23 @@ if st.button("Guardar Cambios en Supabase"):
                 # Si es nan (float), convertir a None
                 if isinstance(value, float) and np.isnan(value):
                     nuevo_reg[key] = None
+                # numpy usa sus propios tipos (numpy.float64, numpy.int64, etc.) que no
+                # son "int"/"float" nativos de Python y algunos clientes los serializan
+                # mal (terminan como texto, p.ej. "10.0"); los pasamos a tipo nativo.
+                elif isinstance(value, np.generic):
+                    nuevo_reg[key] = value.item()
                 # Si es lista o dict, verificar recursivamente (por si acaso)
                 else:
                     nuevo_reg[key] = value
+
+            # Forzar a entero real las columnas que en Supabase son INTEGER, para que
+            # nunca viaje un "10.0" donde la base espera "10".
+            for _col_entera in COLUMNAS_ENTERAS_SUPABASE:
+                if _col_entera in nuevo_reg and nuevo_reg[_col_entera] is not None:
+                    try:
+                        nuevo_reg[_col_entera] = int(round(float(nuevo_reg[_col_entera])))
+                    except (TypeError, ValueError):
+                        nuevo_reg[_col_entera] = None
 
             # Manejar el ID para distinguir insert vs update
             id_val = nuevo_reg.get('id')

@@ -565,6 +565,9 @@ if tiene_algun_importe:
         long_imp['Tipo'] = long_imp['Tipo'].map({'Real': REAL_LBL, 'Previsto_pendiente': PREV_LBL})
         # Orden fijo del apilado: Real primero (desde x=0), Previsto después.
         long_imp['OrdenTipo'] = long_imp['Tipo'].map({REAL_LBL: 0, PREV_LBL: 1})
+        # % que representa cada segmento sobre el total de su barra, para no poner etiqueta
+        # encima de un segmento demasiado angosto (se ve igual en el tooltip al pasar el mouse).
+        long_imp['MontoPct'] = np.where(long_imp['Total'] > 0, long_imp['Monto'] / long_imp['Total'], 0)
 
         h_imp = max(220, min(480, 60 + 30 * resumen_imp['Categoria'].nunique()))
 
@@ -585,6 +588,7 @@ if tiene_algun_importe:
         )
         barras_imp = base_imp.mark_bar(cornerRadius=6, stroke='rgba(0,0,0,0.25)', strokeWidth=1)
 
+        # Etiqueta del TOTAL de la barra (Real + Previsto), al final de la barra.
         label_imp = alt.Chart(resumen_imp).mark_text(
             align='left', baseline='middle', dx=6, fontSize=12, fontWeight='bold'
         ).encode(
@@ -593,8 +597,31 @@ if tiene_algun_importe:
             text=alt.Text('Total:Q', format=',.2f')
         )
 
-        st.altair_chart((barras_imp + label_imp).properties(height=h_imp), use_container_width=True)
-        st.caption("🟩 Real = Importe Real ya cargado · 🟦 Previsto = Importe Previsto de las prefacturas que aún no tienen Real (para no sumar dos veces lo mismo).")
+        # Etiquetas POR SEGMENTO (Real y Previsto por separado), centradas dentro de cada
+        # tramo de la barra apilada. Se ocultan si el segmento es demasiado angosto (<8% de
+        # la barra) para que el texto no se salga ni se amontone; el valor completo sigue
+        # visible al pasar el mouse (tooltip).
+        UMBRAL_PCT_ETIQUETA = 0.08
+        label_real_imp = base_imp.mark_text(
+            align='center', baseline='middle', fontSize=11, fontWeight='bold', color='#065F46'
+        ).encode(
+            text=alt.Text('Monto:Q', format=',.2f')
+        ).transform_filter(
+            (alt.datum.Tipo == REAL_LBL) & (alt.datum.MontoPct >= UMBRAL_PCT_ETIQUETA)
+        )
+        label_prev_imp = base_imp.mark_text(
+            align='center', baseline='middle', fontSize=11, fontWeight='bold', color='#1E3A8A'
+        ).encode(
+            text=alt.Text('Monto:Q', format=',.2f')
+        ).transform_filter(
+            (alt.datum.Tipo == PREV_LBL) & (alt.datum.MontoPct >= UMBRAL_PCT_ETIQUETA)
+        )
+
+        st.altair_chart(
+            (barras_imp + label_real_imp + label_prev_imp + label_imp).properties(height=h_imp),
+            use_container_width=True
+        )
+        st.caption("🟩 Real = Importe Real ya cargado · 🟦 Previsto = Importe Previsto de las prefacturas que aún no tienen Real (para no sumar dos veces lo mismo) · Los números dentro de cada tramo son el Real y el Previsto por separado; el número en negrita al final es la suma de ambos.")
 else:
     st.info("No se encontraron las columnas de importe (Real/Previsto) para graficar.")
 

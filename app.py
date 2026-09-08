@@ -45,6 +45,8 @@ st.markdown("""
 .pipe-title{font-size:.85rem; color:#6b7280; font-weight:800; display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
 .pipe-value{font-size:2.0rem; font-weight:900; color:#111827; line-height:1.05; margin-top:6px;}
 .pipe-sub{font-size:.82rem; color:#6b7280; margin-top:6px;}
+.pipe-money{font-size:1.0rem; font-weight:800; margin-top:2px;}
+.pipe-money .tag{font-weight:600; font-size:.72rem; opacity:.75; margin-left:4px;}
 .pipe-bar{height:8px; background:rgba(15,23,42,0.08); border-radius:999px; overflow:hidden; margin-top:10px;}
 .pipe-bar span{display:block; height:100%; border-radius:999px;}
 .badge{display:inline-block; padding:2px 10px; border-radius:999px; font-size:.75rem; font-weight:900;}
@@ -80,17 +82,31 @@ if 'Sector' in df.columns and 'sector' not in df.columns:
 if 'Subsector' in df.columns and 'subsector' not in df.columns:
     rename_map['Subsector'] = 'subsector'
 
-# Buscar la columna de "Importe Real" sin importar mayúsculas/espacios/guiones bajos
-# (en Supabase puede estar como "Importe Real", "importe_real", "IMPORTE REAL", etc.)
-# Guardamos el nombre ORIGINAL para poder revertir el rename al guardar en Supabase.
-IMPORTE_REAL_COL_ORIGINAL = 'importe_real' if 'importe_real' in df.columns else None
-if IMPORTE_REAL_COL_ORIGINAL is None:
-    for c in df.columns:
+# Buscar columnas de importes sin importar mayúsculas/espacios/guiones bajos
+# (en Supabase pueden estar como "Importe Real", "importe_real", "IMPORTE REAL", etc.)
+# Guardamos el nombre ORIGINAL de cada una para poder revertir el rename al guardar en Supabase.
+def _detectar_columna_importe(df_in, nombre_interno, alias_normalizado):
+    """Busca en df_in una columna que normalice a `alias_normalizado` (sin espacios/guiones/mayúsculas)
+    y devuelve (nombre_original_o_None, entrada_para_rename_map_o_None)."""
+    if nombre_interno in df_in.columns:
+        return nombre_interno, None
+    for c in df_in.columns:
         c_norm = c.strip().lower().replace(' ', '').replace('_', '')
-        if c_norm == 'importereal':
-            rename_map[c] = 'importe_real'
-            IMPORTE_REAL_COL_ORIGINAL = c
-            break
+        if c_norm == alias_normalizado:
+            return c, (c, nombre_interno)
+    return None, None
+
+IMPORTE_REAL_COL_ORIGINAL, _entrada = _detectar_columna_importe(df, 'importe_real', 'importereal')
+if _entrada:
+    rename_map[_entrada[0]] = _entrada[1]
+
+IMPORTE_PREVISTO_COL_ORIGINAL, _entrada = _detectar_columna_importe(df, 'importe_previsto', 'importeprevisto')
+if _entrada:
+    rename_map[_entrada[0]] = _entrada[1]
+
+IMPORTE_PENDIENTE_COL_ORIGINAL, _entrada = _detectar_columna_importe(df, 'importe_pendiente', 'importependiente')
+if _entrada:
+    rename_map[_entrada[0]] = _entrada[1]
 
 if rename_map:
     df = df.rename(columns=rename_map)
@@ -154,8 +170,9 @@ def parse_importe(valor):
     except ValueError:
         return 0.0
 
-if 'importe_real' in df.columns:
-    df['importe_real'] = df['importe_real'].apply(parse_importe)
+for _col_importe in ['importe_real', 'importe_previsto', 'importe_pendiente']:
+    if _col_importe in df.columns:
+        df[_col_importe] = df[_col_importe].apply(parse_importe)
 
 # =========================
 # 5) HELPERS (CYCLE LOGIC)
@@ -311,6 +328,25 @@ sin_clasificar = max(0, kpi_total - (por_elaborar + por_conciliar + pendiente_pe
 
 total_importe_real = df_tablero['importe_real'].sum() if 'importe_real' in df_tablero.columns else 0
 
+# --- Monto por etapa ---
+# En las primeras 3 etapas todavía no existe Importe Real (solo se sabe al recibir el pedido),
+# así que se muestra el Importe Previsto (promedio histórico). En "Pedido Recibido" ya se
+# conoce el Importe Real, así que se muestra ese.
+etapa_tablero = etapa_excluyente(df_tablero)
+tiene_previsto = 'importe_previsto' in df_tablero.columns
+tiene_real = 'importe_real' in df_tablero.columns
+
+def _monto_etapa(nombre_etapa, columna):
+    if columna not in df_tablero.columns:
+        return 0.0
+    return df_tablero.loc[etapa_tablero == nombre_etapa, columna].sum()
+
+monto_por_elaborar = _monto_etapa("Por Elaborar", 'importe_previsto') if tiene_previsto else 0.0
+monto_por_conciliar = _monto_etapa("Por Conciliar", 'importe_previsto') if tiene_previsto else 0.0
+monto_pendiente_pedido = _monto_etapa("Pendiente de Pedido", 'importe_previsto') if tiene_previsto else 0.0
+monto_pedido_recibido = _monto_etapa("Pedido Recibido", 'importe_real') if tiene_real else 0.0
+monto_previsto_pipeline = monto_por_elaborar + monto_por_conciliar + monto_pendiente_pedido
+
 def pct(n, d):
     return (n / d) if d else 0
 
@@ -337,6 +373,7 @@ st.markdown(f"""
     </div>
     <div class="pipe-value">C$ {total_importe_real:,.2f}</div>
     <div class="pipe-sub">Suma según filtros aplicados</div>
+    <div class="pipe-money" style="color:rgb(4,120,87);">+ C$ {monto_previsto_pipeline:,.2f}<span class="tag">previsto en las etapas 1-3</span></div>
     <div class="pipe-bar"><span style="width:100%; background:rgb(16,185,129)"></span></div>
   </div>
   <div class="pipe-card">
@@ -345,6 +382,7 @@ st.markdown(f"""
     </div>
     <div class="pipe-value">{por_elaborar}</div>
     <div class="pipe-sub">Sin Elaborar</div>
+    <div class="pipe-money" style="color:rgb(161,98,7);">C$ {monto_por_elaborar:,.2f}<span class="tag">previsto</span></div>
     <div class="pipe-bar"><span style="width:{p1*100:.0f}%; background:rgb(245,158,11)"></span></div>
   </div>
   <div class="pipe-card">
@@ -353,6 +391,7 @@ st.markdown(f"""
     </div>
     <div class="pipe-value">{por_conciliar}</div>
     <div class="pipe-sub">Elaborada y sin Conciliar</div>
+    <div class="pipe-money" style="color:rgb(29,78,216);">C$ {monto_por_conciliar:,.2f}<span class="tag">previsto</span></div>
     <div class="pipe-bar"><span style="width:{p2*100:.0f}%; background:rgb(59,130,246)"></span></div>
   </div>
   <div class="pipe-card">
@@ -361,6 +400,7 @@ st.markdown(f"""
     </div>
     <div class="pipe-value">{pendiente_pedido}</div>
     <div class="pipe-sub">Conciliada y sin <b>pedido</b></div>
+    <div class="pipe-money" style="color:rgb(126,34,206);">C$ {monto_pendiente_pedido:,.2f}<span class="tag">previsto</span></div>
     <div class="pipe-bar"><span style="width:{p3*100:.0f}%; background:rgb(168,85,247)"></span></div>
   </div>
   <div class="pipe-card">
@@ -369,10 +409,14 @@ st.markdown(f"""
     </div>
     <div class="pipe-value">{pedido_recibido}</div>
     <div class="pipe-sub">Conciliada y con <b>pedido</b></div>
+    <div class="pipe-money" style="color:rgb(4,120,87);">C$ {monto_pedido_recibido:,.2f}<span class="tag">real</span></div>
     <div class="pipe-bar"><span style="width:{p4*100:.0f}%; background:rgb(16,185,129)"></span></div>
   </div>
 </div>
 """, unsafe_allow_html=True)
+
+if not tiene_previsto:
+    st.caption("ℹ️ No se encontró la columna de Importe Previsto — los montos por etapa 1-3 no se pueden mostrar.")
 
 if sin_clasificar > 0:
     st.warning(f"⚠️ Hay {sin_clasificar} registros 'Sin clasificar' (revisa fechas/pedido).")
@@ -383,6 +427,13 @@ st.divider()
 # 9) STACKED CHART (df_tablero)
 # =========================
 st.subheader("📊 Distribución de la Carga (por etapa)")
+
+modo_carga = st.radio(
+    "Ver por:",
+    ["Nº de prefacturas", "Monto (C$)"],
+    horizontal=True,
+    key="modo_carga_etapa"
+)
 
 df_g = df_tablero.copy()
 df_g['Etapa'] = etapa_excluyente(df_g)
@@ -403,24 +454,39 @@ if col_categoria == 'subsector':
 else:
     df_g['Categoria'] = np.where(cat != '', cat, 'Sin dato')
 
-resumen = (
-    df_g.groupby(['Categoria', 'Etapa'], as_index=False)
-        .size()
-        .rename(columns={'size': 'Cantidad'})
-)
+orden_etapas = ["Por Elaborar", "Por Conciliar", "Pendiente de Pedido", "Pedido Recibido"]
 
-tot_cat = resumen.groupby('Categoria', as_index=False)['Cantidad'].sum().rename(columns={'Cantidad': 'TotalCategoria'})
-resumen = resumen.merge(tot_cat, on='Categoria', how='left')
+if modo_carga == "Nº de prefacturas":
+    # --- Cantidad de prefacturas por etapa ---
+    resumen = (
+        df_g.groupby(['Categoria', 'Etapa'], as_index=False)
+            .size()
+            .rename(columns={'size': 'Valor'})
+    )
+    titulo_x = 'Nº Prefacturas'
+    fmt_valor = ',.0f'
+    fmt_tooltip = ',.0f'
+else:
+    # --- Monto por etapa: Importe Real donde ya se recibió el pedido, Importe Previsto en las demás ---
+    df_g['importe_real'] = df_g['importe_real'] if 'importe_real' in df_g.columns else 0.0
+    df_g['importe_previsto'] = df_g['importe_previsto'] if 'importe_previsto' in df_g.columns else 0.0
+    df_g['Valor'] = np.where(df_g['Etapa'] == 'Pedido Recibido', df_g['importe_real'], df_g['importe_previsto'])
+    resumen = df_g.groupby(['Categoria', 'Etapa'], as_index=False)['Valor'].sum()
+    titulo_x = 'Monto — Real en "Pedido Recibido", Previsto en las demás (C$)'
+    fmt_valor = ',.2f'
+    fmt_tooltip = ',.2f'
 
-orden_etapas = ["1. Por Elaborar", "2. Por Conciliar", "3. Pendiente de Pedido", "4. Pedido Recibido"]
 if (resumen['Etapa'] == "Sin clasificar").any():
     orden_etapas = orden_etapas + ["Sin clasificar"]
+
+tot_cat = resumen.groupby('Categoria', as_index=False)['Valor'].sum().rename(columns={'Valor': 'TotalCategoria'})
+resumen = resumen.merge(tot_cat, on='Categoria', how='left')
 
 h = max(260, min(520, 60 + 30 * resumen['Categoria'].nunique()))
 
 base = alt.Chart(resumen).encode(
     y=alt.Y('Categoria:N', sort=alt.SortField(field='TotalCategoria', order='descending'), title=etiqueta),
-    x=alt.X('Cantidad:Q', stack='zero', title='Nº Prefacturas'),
+    x=alt.X('Valor:Q', stack='zero', title=titulo_x),
     color=alt.Color(
     'Etapa:N',
     sort=orden_etapas,
@@ -433,26 +499,31 @@ base = alt.Chart(resumen).encode(
     tooltip=[
         alt.Tooltip('Categoria:N', title=etiqueta),
         alt.Tooltip('Etapa:N', title='Etapa'),
-        alt.Tooltip('Cantidad:Q', title='Cantidad'),
-        alt.Tooltip('TotalCategoria:Q', title='Total categoría'),
+        alt.Tooltip('Valor:Q', title='Valor', format=fmt_tooltip),
+        alt.Tooltip('TotalCategoria:Q', title='Total categoría', format=fmt_tooltip),
     ]
 )
 
 barras = base.mark_bar(size=26, cornerRadius=6, stroke='rgba(0,0,0,0.25)', strokeWidth=1)
-labels = base.transform_filter(alt.datum.Cantidad > 0).mark_text(
+labels = base.transform_filter(alt.datum.Valor > 0).mark_text(
     align='left', baseline='middle', dx=6, fontSize=12
-).encode(text='Cantidad:Q')
+).encode(text=alt.Text('Valor:Q', format=fmt_valor))
 
 st.altair_chart((barras + labels).properties(height=h), use_container_width=True)
+
+if modo_carga == "Monto (C$)":
+    st.caption("💡 El monto de \"Pedido Recibido\" es Importe Real (ya conocido); el de las demás etapas es Importe Previsto (estimado por promedio histórico).")
 
 st.divider()
 
 # =========================
-# 9b) CHART: IMPORTE REAL POR SECTOR/SUBSECTOR
+# 9b) CHART: IMPORTE REAL + PREVISTO POR SECTOR/SUBSECTOR
 # =========================
-st.subheader("💰 Importe Real por Sector")
+st.subheader("💰 Importe Real y Previsto por Sector")
 
-if 'importe_real' in df_tablero.columns:
+tiene_algun_importe = ('importe_real' in df_tablero.columns) or ('importe_previsto' in df_tablero.columns)
+
+if tiene_algun_importe:
     df_imp = df_tablero.copy()
 
     # Misma lógica de categoría que el gráfico anterior (subsector si hay sector elegido)
@@ -470,32 +541,62 @@ if 'importe_real' in df_tablero.columns:
     else:
         df_imp['Categoria'] = np.where(cat_imp != '', cat_imp, 'Sin dato')
 
-    resumen_imp = (
-        df_imp.groupby('Categoria', as_index=False)['importe_real']
-        .sum()
-        .rename(columns={'importe_real': 'Importe'})
-    )
-
-    if resumen_imp.empty or resumen_imp['Importe'].sum() == 0:
-        st.info("No hay montos de importe real para los filtros seleccionados.")
+    df_imp['Real'] = df_imp['importe_real'].fillna(0) if 'importe_real' in df_imp.columns else 0.0
+    # El "Previsto" que se grafica es solo el que TODAVÍA no se volvió Real (para no contar dos veces
+    # lo mismo): si la prefactura ya tiene Importe Real, su previsto ya no aporta a la barra.
+    if 'importe_previsto' in df_imp.columns:
+        df_imp['Previsto_pendiente'] = np.where(df_imp['Real'] > 0, 0.0, df_imp['importe_previsto'].fillna(0))
     else:
+        df_imp['Previsto_pendiente'] = 0.0
+
+    resumen_imp = df_imp.groupby('Categoria', as_index=False)[['Real', 'Previsto_pendiente']].sum()
+    resumen_imp['Total'] = resumen_imp['Real'] + resumen_imp['Previsto_pendiente']
+
+    if resumen_imp.empty or resumen_imp['Total'].sum() == 0:
+        st.info("No hay montos de importe real ni previsto para los filtros seleccionados.")
+    else:
+        REAL_LBL = 'Real (ya conocido)'
+        PREV_LBL = 'Previsto (aún no es real)'
+        long_imp = resumen_imp.melt(
+            id_vars=['Categoria', 'Total'],
+            value_vars=['Real', 'Previsto_pendiente'],
+            var_name='Tipo', value_name='Monto'
+        )
+        long_imp['Tipo'] = long_imp['Tipo'].map({'Real': REAL_LBL, 'Previsto_pendiente': PREV_LBL})
+        # Orden fijo del apilado: Real primero (desde x=0), Previsto después.
+        long_imp['OrdenTipo'] = long_imp['Tipo'].map({REAL_LBL: 0, PREV_LBL: 1})
+
         h_imp = max(220, min(480, 60 + 30 * resumen_imp['Categoria'].nunique()))
 
-        base_imp = alt.Chart(resumen_imp).encode(
-            y=alt.Y('Categoria:N', sort='-x', title=etiqueta_imp),
-            x=alt.X('Importe:Q', title='Importe Real (C$)'),
+        base_imp = alt.Chart(long_imp).encode(
+            y=alt.Y('Categoria:N', sort=alt.SortField(field='Total', order='descending'), title=etiqueta_imp),
+            x=alt.X('Monto:Q', stack='zero', title='Importe Real + Previsto (C$)'),
+            order=alt.Order('OrdenTipo:Q'),
+            color=alt.Color(
+                'Tipo:N', title='',
+                scale=alt.Scale(domain=[REAL_LBL, PREV_LBL], range=['#10B981', '#BFDBFE'])
+            ),
             tooltip=[
                 alt.Tooltip('Categoria:N', title=etiqueta_imp),
-                alt.Tooltip('Importe:Q', title='Importe Real', format=',.2f'),
+                alt.Tooltip('Tipo:N', title=''),
+                alt.Tooltip('Monto:Q', title='Monto', format=',.2f'),
+                alt.Tooltip('Total:Q', title='Total (Real + Previsto)', format=',.2f'),
             ]
         )
-        barras_imp = base_imp.mark_bar(cornerRadius=6, color="#10B981", stroke='rgba(0,0,0,0.25)', strokeWidth=1)
-        labels_imp = base_imp.mark_text(align='left', baseline='middle', dx=6, fontSize=12).encode(
-            text=alt.Text('Importe:Q', format=',.2f')
+        barras_imp = base_imp.mark_bar(cornerRadius=6, stroke='rgba(0,0,0,0.25)', strokeWidth=1)
+
+        label_imp = alt.Chart(resumen_imp).mark_text(
+            align='left', baseline='middle', dx=6, fontSize=12, fontWeight='bold'
+        ).encode(
+            y=alt.Y('Categoria:N', sort=alt.SortField(field='Total', order='descending')),
+            x=alt.X('Total:Q'),
+            text=alt.Text('Total:Q', format=',.2f')
         )
-        st.altair_chart((barras_imp + labels_imp).properties(height=h_imp), use_container_width=True)
+
+        st.altair_chart((barras_imp + label_imp).properties(height=h_imp), use_container_width=True)
+        st.caption("🟩 Real = Importe Real ya cargado · 🟦 Previsto = Importe Previsto de las prefacturas que aún no tienen Real (para no sumar dos veces lo mismo).")
 else:
-    st.info("No se encontró la columna 'importe_real' para graficar.")
+    st.info("No se encontraron las columnas de importe (Real/Previsto) para graficar.")
 
 # =========================
 # 10) TABLE (df_filtrado)
@@ -533,7 +634,19 @@ configuracion_columnas = {
     "area": st.column_config.SelectboxColumn(
         "Área",
         options=[""] + AREAS
-    )
+    ),
+    # Columnas calculadas automáticamente (promedio histórico por Sector+Área+Sub-área):
+    # se muestran de solo lectura para que no se sobrescriban a mano por error.
+    "importe_previsto": st.column_config.NumberColumn(
+        "Importe Previsto", format="%.2f", disabled=True,
+        help="Calculado: promedio histórico del Importe Real en el mismo Sector+Área+Sub-área."
+    ),
+    "importe_pendiente": st.column_config.NumberColumn(
+        "Importe Pendiente", format="%.2f", disabled=True,
+        help="Previsto − Real. Se recalcula junto con el Previsto."
+    ),
+    "Previsto Confianza": st.column_config.TextColumn("Confianza Previsto", disabled=True),
+    "Previsto N Datos": st.column_config.NumberColumn("N° datos usados", disabled=True),
 }
 
 # --- Dataframe para el editor (sin índice visible) ---
@@ -590,14 +703,16 @@ if st.button("Guardar Cambios en Supabase"):
         # También asegurar que cualquier string 'nan', 'NaT', 'None' quede como None
         datos_a_enviar = datos_a_enviar.replace(['nan', 'NaT', 'None', '<NA>', ''], None)
 
-        # --- 2b) Revertir el nombre de la columna 'importe_real' al nombre REAL en Supabase ---
-        # (internamente usamos 'importe_real' aunque en la tabla tenga otro nombre/mayúsculas)
-        if (
-            IMPORTE_REAL_COL_ORIGINAL
-            and IMPORTE_REAL_COL_ORIGINAL != 'importe_real'
-            and 'importe_real' in datos_a_enviar.columns
-        ):
-            datos_a_enviar = datos_a_enviar.rename(columns={'importe_real': IMPORTE_REAL_COL_ORIGINAL})
+        # --- 2b) Revertir el nombre de las columnas de importe a su nombre REAL en Supabase ---
+        # (internamente usamos importe_real/importe_previsto/importe_pendiente aunque en la
+        # tabla tengan otro nombre/mayúsculas, p.ej. "Importe Real", "Importe Previsto")
+        for _interno, _original in [
+            ('importe_real', IMPORTE_REAL_COL_ORIGINAL),
+            ('importe_previsto', IMPORTE_PREVISTO_COL_ORIGINAL),
+            ('importe_pendiente', IMPORTE_PENDIENTE_COL_ORIGINAL),
+        ]:
+            if _original and _original != _interno and _interno in datos_a_enviar.columns:
+                datos_a_enviar = datos_a_enviar.rename(columns={_interno: _original})
 
         # --- 3) Convertir a diccionario (ahora sin valores nan) ---
         registros = datos_a_enviar.to_dict('records')

@@ -252,6 +252,183 @@ PERIODOS = [f"{m} 1Q" for m in MESES] + [f"{m} 2Q" for m in MESES]
 AREAS = ["MANTENIMIENTO", "DESARROLLO", "PROYECTOS", "PNESER", "CAMPAÑA", "PSSEN"]
 
 # =========================
+# 5b) RECALCULAR IMPORTE PREVISTO / IMPORTE PENDIENTE
+# =========================
+# Diccionario de normalización de sub_area (variantes de escritura → forma única), para que el
+# promedio histórico no separe en grupos distintos algo que en realidad es la misma sub-área.
+# Mismo criterio usado en el cálculo original del 08/09/2026 (ver hoja "Normalización aplicada").
+# Casos con código realmente distinto (EA vs KV, ESTELI vs MATAGALPA, etc.) NO se unifican.
+ALIAS_SUB_AREA = {
+    ('MANAGUA', 'CAMPAÑA', 'INGENIEROS Y TENICOS'): 'INGENIEROS/TECNICOS',
+    ('MANAGUA', 'CAMPAÑA', 'INGENIEROS/ TECNICOS'): 'INGENIEROS/TECNICOS',
+    ('MANAGUA', 'CAMPAÑA', 'TÉCNICOS'): 'TECNICOS',
+    ('MANAGUA', 'CAMPAÑA', 'VEHÍCULO'): 'VEHICULO',
+    ('MANAGUA', 'DESARROLLO', 'PPSSE TERCERO'): 'PPSS TERCERO',
+    ('MANAGUA', 'MANTENIMIENTO', 'CAMIONES DE PODA'): 'CAMIONES PODA',
+    ('MANAGUA', 'MANTENIMIENTO', 'VEHICULOS GERENCIA'): 'VEHICULO GERENCIA',
+    ('MANAGUA', 'PROYECTOS', 'TERCERO'): 'PPSS TERCERO',
+    ('NORTE', 'DESARROLLO', 'ADMINISTRATIVA'): 'ADMINISTRATIVO',
+    ('NORTE', 'DESARROLLO', 'PPSS PROPIAS'): 'PPSS PROPIA',
+    ('NORTE', 'DESARROLLO', 'PPSS TERCEROS'): 'PPSS TERCERO',
+    ('NORTE', 'MANTENIMIENTO', 'ADMINISTRATIVA'): 'ADMINISTRATIVO',
+    ('NORTE', 'MANTENIMIENTO', 'CAMIONES DE PODA'): 'CAMIONES PODA',
+    ('NORTE', 'MANTENIMIENTO', 'DIGITADORAS'): 'DIGITADORES',
+    ('NORTE', 'PNESER', 'ADMINISTRATIVA'): 'ADMINISTRATIVO',
+    ('NORTE', 'PNESER', 'PNESER C1 DNDS'): 'PNESER C1 (DNDS)',
+    ('NORTE', 'PNESER', 'PNESERC2'): 'PNESER C2',
+    ('OCCIDENTE', 'MANTENIMIENTO', 'MTTO- PODA'): 'MTTO-PODA',
+    ('ORIENTE', 'CAMPAÑA', 'CAMPAÑAS'): 'CAMPAÑA',
+    ('ORIENTE', 'DESARROLLO', 'PPSS PROPIAS'): 'PPSS PROPIA',
+    ('ORIENTE', 'DESARROLLO', 'PPSS TERCEROS'): 'PPSS TERCERO',
+    ('ORIENTE', 'DESARROLLO', 'PROPIA'): 'PPSS PROPIA',
+    ('ORIENTE', 'DESARROLLO', 'PROPIAS'): 'PPSS PROPIA',
+    ('ORIENTE', 'DESARROLLO', 'TERCEROS'): 'PPSS TERCERO',
+    ('ORIENTE', 'MANTENIMIENTO', 'DIGITADORES - TECNICOS'): 'DIGITADORES-TECNICOS',
+    ('ORIENTE', 'MANTENIMIENTO', 'DIGITADORES/TECNICOS'): 'DIGITADORES-TECNICOS',
+    ('SUR', 'DESARROLLO', 'PPSS PROPIAS'): 'PPSS PROPIA',
+    ('SUR', 'DESARROLLO', 'PPSS TERCEROS'): 'PPSS TERCERO',
+    ('SUR', 'DESARROLLO', 'PROPIA'): 'PPSS PROPIA',
+    ('SUR', 'DESARROLLO', 'TERCERO'): 'PPSS TERCERO',
+    ('SUR', 'MANTENIMIENTO', 'ADMINISTRADOR'): 'ADMINISTRATIVO',
+    ('SUR', 'MANTENIMIENTO', 'CAMION DE PODA'): 'CAMIONES PODA',
+    ('SUR', 'MANTENIMIENTO', 'CAMION PODA'): 'CAMIONES PODA',
+    ('SUR', 'MANTENIMIENTO', 'CAMIONES DE PODA'): 'CAMIONES PODA',
+    ('SUR', 'MANTENIMIENTO', 'PODA - CAMIONES'): 'CAMIONES PODA',
+    ('SUR', 'MANTENIMIENTO', 'DIGITADOR  EA'): 'DIGITADOR EA',
+    ('SUR', 'MANTENIMIENTO', 'DIGITADOR- EA'): 'DIGITADOR EA',
+    ('SUR', 'MANTENIMIENTO', 'DIGITADORES EA'): 'DIGITADOR EA',
+    ('SUR', 'MANTENIMIENTO', 'DIGITADORES E'): 'DIGITADOR EA',
+    ('SUR', 'MANTENIMIENTO', 'DIGITADORES EA -EP'): 'DIGITADOR EA-EP',
+    ('SUR', 'MANTENIMIENTO', 'DIGITADORES EA-EP'): 'DIGITADOR EA-EP',
+    ('SUR', 'MANTENIMIENTO', 'DIGITADORES K'): 'DIGITADOR KV',
+    ('SUR', 'MANTENIMIENTO', 'DIGITADORES KV'): 'DIGITADOR KV',
+    ('SUR', 'PNESER', 'ADMIN'): 'ADMINISTRATIVO',
+    ('SUR', 'PNESER', 'ADMINISTRATIVA'): 'ADMINISTRATIVO',
+}
+
+
+def recalcular_previsto_pendiente():
+    """
+    Vuelve a calcular Importe Previsto / Importe Pendiente / Previsto Confianza / Previsto N Datos
+    para TODAS las prefacturas, usando siempre la información más reciente de Supabase (no la
+    tabla ya cargada en pantalla, por si hay filtros aplicados).
+
+    Metodología (igual a la del cálculo original del 08/09/2026):
+    - Si la prefactura YA tiene Importe Real (> 0): Previsto = Real, Pendiente = 0,
+      Confianza = "Real", N Datos = None.
+    - Si NO tiene Real todavía: Previsto = promedio de Importe Real de otras prefacturas del
+      mismo Sector + Área + Sub-área (normalizada), sin incluir nunca el propio valor de la fila
+      (leave-one-out). Si ese grupo no tiene suficiente historial, se usa como respaldo el
+      promedio de Sector + Área. Si tampoco hay datos, queda "Sin datos" (Previsto = None).
+      Pendiente = Previsto (porque el Real todavía es 0).
+    - Confianza según cantidad de datos usados: Alta (≥5), Media (3-4), Baja (1-2),
+      "Estimado (nivel Sector+Área)" cuando se usó el respaldo.
+    """
+    resp = supabase.table('prefacturas_pedidos').select(
+        'id, sector, area, sub_area, "Importe Real"'
+    ).execute()
+    dfr = pd.DataFrame(resp.data)
+    if dfr.empty:
+        return {"total": 0, "con_real": 0, "alta": 0, "media": 0, "baja": 0,
+                "estimado": 0, "sin_datos": 0}
+
+    dfr['Importe Real'] = pd.to_numeric(dfr['Importe Real'], errors='coerce')
+    dfr['sector_n'] = dfr['sector'].fillna('').astype(str).str.strip().str.upper()
+    dfr['area_n'] = dfr['area'].fillna('').astype(str).str.strip().str.upper()
+    dfr['sub_area_n'] = dfr['sub_area'].fillna('').astype(str).str.strip().str.upper()
+    dfr['sub_area_canon'] = [
+        ALIAS_SUB_AREA.get((sec, ar, sa), sa) if sa else ''
+        for sec, ar, sa in zip(dfr['sector_n'], dfr['area_n'], dfr['sub_area_n'])
+    ]
+    dfr['tiene_real'] = dfr['Importe Real'].fillna(0) > 0
+    dfr['real_val'] = dfr['Importe Real'].fillna(0)
+
+    # --- Nivel 1: Sector + Área + Sub-área (canon), con leave-one-out ---
+    dfr['grupo1'] = np.where(
+        (dfr['sector_n'] != '') & (dfr['area_n'] != '') & (dfr['sub_area_canon'] != ''),
+        dfr['sector_n'] + '||' + dfr['area_n'] + '||' + dfr['sub_area_canon'],
+        None
+    )
+    g1 = dfr[dfr['tiene_real']].groupby('grupo1')['real_val'].agg(['sum', 'count'])
+    dfr = dfr.merge(g1.rename(columns={'sum': 'g1_sum', 'count': 'g1_n'}), on='grupo1', how='left')
+    dfr['g1_sum'] = dfr['g1_sum'].fillna(0.0)
+    dfr['g1_n'] = dfr['g1_n'].fillna(0).astype(int)
+    dfr['g1_sum_loo'] = dfr['g1_sum'] - np.where(dfr['tiene_real'], dfr['real_val'], 0.0)
+    dfr['g1_n_loo'] = dfr['g1_n'] - np.where(dfr['tiene_real'], 1, 0)
+
+    # --- Nivel 2 (respaldo): Sector + Área, con leave-one-out ---
+    dfr['grupo2'] = np.where(
+        (dfr['sector_n'] != '') & (dfr['area_n'] != ''),
+        dfr['sector_n'] + '||' + dfr['area_n'],
+        None
+    )
+    g2 = dfr[dfr['tiene_real']].groupby('grupo2')['real_val'].agg(['sum', 'count'])
+    dfr = dfr.merge(g2.rename(columns={'sum': 'g2_sum', 'count': 'g2_n'}), on='grupo2', how='left')
+    dfr['g2_sum'] = dfr['g2_sum'].fillna(0.0)
+    dfr['g2_n'] = dfr['g2_n'].fillna(0).astype(int)
+    dfr['g2_sum_loo'] = dfr['g2_sum'] - np.where(dfr['tiene_real'], dfr['real_val'], 0.0)
+    dfr['g2_n_loo'] = dfr['g2_n'] - np.where(dfr['tiene_real'], 1, 0)
+
+    previsto_calc, confianza_calc, n_datos_calc = [], [], []
+    for _, row in dfr.iterrows():
+        if row['g1_n_loo'] > 0:
+            p = row['g1_sum_loo'] / row['g1_n_loo']
+            n = int(row['g1_n_loo'])
+            c = 'Alta' if n >= 5 else ('Media' if n >= 3 else 'Baja')
+        elif row['g2_n_loo'] > 0:
+            p = row['g2_sum_loo'] / row['g2_n_loo']
+            n = int(row['g2_n_loo'])
+            c = 'Estimado (nivel Sector+Área)'
+        else:
+            p, n, c = None, 0, 'Sin datos'
+        previsto_calc.append(p)
+        confianza_calc.append(c)
+        n_datos_calc.append(n if p is not None else 0)
+
+    dfr['previsto_calc'] = previsto_calc
+    dfr['confianza_calc'] = confianza_calc
+    dfr['n_datos_calc'] = n_datos_calc
+
+    # --- Regla: filas que YA tienen Real → Previsto = Real, Pendiente = 0 ---
+    dfr['previsto_final'] = np.where(dfr['tiene_real'], dfr['real_val'], dfr['previsto_calc'])
+    dfr['confianza_final'] = np.where(dfr['tiene_real'], 'Real', dfr['confianza_calc'])
+    dfr['n_datos_final'] = np.where(dfr['tiene_real'], np.nan, dfr['n_datos_calc'])
+    dfr['pendiente_final'] = np.where(
+        dfr['tiene_real'], 0.0,
+        np.where(pd.notna(dfr['previsto_calc']), dfr['previsto_calc'], np.nan)
+    )
+
+    # --- Armar registros y guardar en Supabase, en lotes ---
+    registros = []
+    for _, row in dfr.iterrows():
+        prev = row['previsto_final']
+        pend = row['pendiente_final']
+        ndat = row['n_datos_final']
+        registros.append({
+            'id': int(row['id']),
+            'Importe Previsto': None if pd.isna(prev) else float(round(prev, 2)),
+            'Importe Pendiente': None if pd.isna(pend) else float(round(pend, 2)),
+            'Previsto Confianza': row['confianza_final'],
+            # Entero real (no "10.0"), igual que la corrección aplicada al guardado normal.
+            'Previsto N Datos': None if pd.isna(ndat) else int(ndat),
+        })
+
+    LOTE = 200
+    for i in range(0, len(registros), LOTE):
+        supabase.table('prefacturas_pedidos').upsert(registros[i:i + LOTE]).execute()
+
+    return {
+        "total": len(dfr),
+        "con_real": int(dfr['tiene_real'].sum()),
+        "alta": int((dfr['confianza_final'] == 'Alta').sum()),
+        "media": int((dfr['confianza_final'] == 'Media').sum()),
+        "baja": int((dfr['confianza_final'] == 'Baja').sum()),
+        "estimado": int((dfr['confianza_final'] == 'Estimado (nivel Sector+Área)').sum()),
+        "sin_datos": int((dfr['confianza_final'] == 'Sin datos').sum()),
+    }
+
+
+# =========================
 # 6) SIDEBAR FILTERS
 # =========================
 st.sidebar.header("🎯 Filtros de Gestión")
@@ -640,6 +817,36 @@ if tiene_algun_importe:
         st.caption("🟩 Real = Importe Real ya cargado · 🟦 Previsto = Importe Previsto de las prefacturas que aún no tienen Real (para no sumar dos veces lo mismo) · Los números dentro de cada tramo son el Real y el Previsto por separado; el número en negrita al final es la suma de ambos.")
 else:
     st.info("No se encontraron las columnas de importe (Real/Previsto) para graficar.")
+
+# =========================
+# 9c) RECALCULAR IMPORTE PREVISTO / IMPORTE PENDIENTE
+# =========================
+with st.expander("🔄 Recalcular Importe Previsto e Importe Pendiente", expanded=False):
+    st.caption(
+        "El Importe Previsto y el Importe Pendiente NO se recalculan solos: quedan fijos desde "
+        "la última vez que se calcularon. Usa este botón cuando agregues prefacturas nuevas o "
+        "cargues importes reales, para que el pronóstico se actualice con toda la información "
+        "más reciente de la base de datos (no solo con lo que ves filtrado en pantalla).\n\n"
+        "Reglas: si una prefactura YA tiene Importe Real, su Previsto pasa a ser igual al Real y "
+        "su Pendiente queda en 0. Si todavía NO tiene Real, su Previsto se calcula como el "
+        "promedio histórico de otras prefacturas del mismo Sector + Área + Sub-área (sin contar "
+        "la propia fila), y su Pendiente queda igual a ese Previsto."
+    )
+    if st.button("🔄 Recalcular Previsto y Pendiente", key="btn_recalcular_previsto"):
+        with st.spinner("Recalculando Previsto y Pendiente para todas las prefacturas…"):
+            try:
+                resumen_recalc = recalcular_previsto_pendiente()
+                st.success(
+                    f"✅ Se recalcularon {resumen_recalc['total']} prefacturas: "
+                    f"{resumen_recalc['con_real']} ya con Importe Real (Previsto = Real), "
+                    f"{resumen_recalc['alta']} con confianza Alta, "
+                    f"{resumen_recalc['media']} Media, {resumen_recalc['baja']} Baja, "
+                    f"{resumen_recalc['estimado']} Estimadas (nivel Sector+Área) y "
+                    f"{resumen_recalc['sin_datos']} sin datos suficientes."
+                )
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al recalcular: {e}")
 
 # =========================
 # 10) TABLE (df_filtrado)

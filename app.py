@@ -568,6 +568,15 @@ if tiene_algun_importe:
         # % que representa cada segmento sobre el total de su barra, para no poner etiqueta
         # encima de un segmento demasiado angosto (se ve igual en el tooltip al pasar el mouse).
         long_imp['MontoPct'] = np.where(long_imp['Total'] > 0, long_imp['Monto'] / long_imp['Total'], 0)
+        # Punto medio real de cada tramo dentro de la barra apilada (Real: 0→Real,
+        # Previsto: Real→Real+Previsto). Vega-Lite apila las BARRAS solo, pero un mark_text
+        # que reutilice el mismo encoding de x se dibuja en el INICIO del tramo, no en su
+        # centro — por eso el texto quedaba pegado a la frontera entre el verde y el celeste,
+        # ilegible. Calculamos el centro a mano y lo usamos con stack=None en las etiquetas.
+        long_imp = long_imp.sort_values(['Categoria', 'OrdenTipo'])
+        long_imp['FinTramo'] = long_imp.groupby('Categoria')['Monto'].cumsum()
+        long_imp['InicioTramo'] = long_imp['FinTramo'] - long_imp['Monto']
+        long_imp['MedioTramo'] = long_imp['InicioTramo'] + long_imp['Monto'] / 2.0
 
         h_imp = max(220, min(480, 60 + 30 * resumen_imp['Categoria'].nunique()))
 
@@ -598,18 +607,25 @@ if tiene_algun_importe:
         )
 
         # Etiquetas POR SEGMENTO (Real y Previsto por separado), centradas dentro de cada
-        # tramo de la barra apilada. Se ocultan si el segmento es demasiado angosto (<8% de
-        # la barra) para que el texto no se salga ni se amontone; el valor completo sigue
-        # visible al pasar el mouse (tooltip).
+        # tramo de la barra apilada usando el punto medio calculado arriba (MedioTramo,
+        # con stack=None: es un valor absoluto, no se vuelve a apilar). Se ocultan si el
+        # segmento es demasiado angosto (<8% de la barra) para que el texto no se salga del
+        # tramo ni se amontone; el valor completo sigue visible al pasar el mouse (tooltip).
         UMBRAL_PCT_ETIQUETA = 0.08
-        label_real_imp = base_imp.mark_text(
-            align='center', baseline='middle', fontSize=11, fontWeight='bold', color='#065F46'
+        base_label_imp = alt.Chart(long_imp).encode(
+            y=alt.Y('Categoria:N', sort=alt.SortField(field='Total', order='descending')),
+            x=alt.X('MedioTramo:Q', stack=None),
+        )
+        # Real: texto blanco sobre el verde (#10B981) para máximo contraste.
+        label_real_imp = base_label_imp.mark_text(
+            align='center', baseline='middle', fontSize=11, fontWeight='bold', color='#FFFFFF'
         ).encode(
             text=alt.Text('Monto:Q', format=',.2f')
         ).transform_filter(
             (alt.datum.Tipo == REAL_LBL) & (alt.datum.MontoPct >= UMBRAL_PCT_ETIQUETA)
         )
-        label_prev_imp = base_imp.mark_text(
+        # Previsto: texto azul oscuro sobre el celeste (#BFDBFE) para máximo contraste.
+        label_prev_imp = base_label_imp.mark_text(
             align='center', baseline='middle', fontSize=11, fontWeight='bold', color='#1E3A8A'
         ).encode(
             text=alt.Text('Monto:Q', format=',.2f')

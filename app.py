@@ -184,7 +184,14 @@ def serie_pedido_lleno(df_in: pd.DataFrame) -> pd.Series:
     return df_in['pedido'].fillna('').astype(str).str.strip().ne('')
 
 def aplicar_filtro_estado(df_in: pd.DataFrame, estado: str) -> pd.DataFrame:
-    """Filtra el dataframe según el estado seleccionado del ciclo."""
+    """
+    Filtra el dataframe según el estado seleccionado del ciclo.
+
+    Regla de negocio (ajustada 09/09/2026, a pedido del usuario): tener el número de
+    PEDIDO ya es suficiente para considerar la prefactura como "Pedidos Recibidos" — no
+    hace falta que además tenga fecha de conciliación —, porque algunos clientes se saltan
+    ese paso y pagan directo contra el pedido. Mismo criterio que etapa_excluyente().
+    """
     if estado == "Ver Todo":
         return df_in
 
@@ -196,31 +203,45 @@ def aplicar_filtro_estado(df_in: pd.DataFrame, estado: str) -> pd.DataFrame:
 
     pedido_lleno = serie_pedido_lleno(df_in)
 
-    if estado == "Pendientes de Elaborar":
+    # Nota: las opciones del radio de la barra lateral llevan un número al inicio
+    # ("1. Pendientes de Elaborar", etc.) — se compara con "in estado" en vez de "==" para
+    # que el filtro funcione sin importar ese prefijo.
+    if "Pendientes de Elaborar" in estado:
         return df_in[df_in['fecha_elaboracion'].isnull()]
 
-    if estado == "Pendientes de Conciliar":
+    if "Pedidos Recibidos" in estado:
         return df_in[
             df_in['fecha_elaboracion'].notnull() &
+            pedido_lleno
+        ]
+
+    if "Pendientes de Conciliar" in estado:
+        return df_in[
+            df_in['fecha_elaboracion'].notnull() &
+            (~pedido_lleno) &
             df_in['fecha_conciliacion'].isnull()
         ]
 
-    if estado == "Pendientes de Pedido":
+    if "Pendientes de Pedido" in estado:
         return df_in[
-            df_in['fecha_conciliacion'].notnull() &
-            (~pedido_lleno)
-        ]
-
-    if estado == "Pedidos Recibidos":
-        return df_in[
-            df_in['fecha_conciliacion'].notnull() &
-            (pedido_lleno)
+            df_in['fecha_elaboracion'].notnull() &
+            (~pedido_lleno) &
+            df_in['fecha_conciliacion'].notnull()
         ]
 
     return df_in
 
 def etapa_excluyente(df_in: pd.DataFrame) -> pd.Series:
-    """Devuelve etapa por fila (excluyente) según ciclo."""
+    """
+    Devuelve la etapa por fila (excluyente) según el ciclo de la prefactura.
+
+    Regla de negocio (ajustada 09/09/2026, a pedido del usuario): tener el número de
+    PEDIDO ya es suficiente para considerar la prefactura como "Pedido Recibido" — no hace
+    falta que además tenga fecha de conciliación —, porque algunos clientes se saltan el
+    paso de conciliación y pagan directo contra el pedido. Por eso "Pedido Recibido" se
+    evalúa ANTES que "Por Conciliar"/"Pendiente de Pedido": si ya hay pedido, gana esa
+    etapa sin importar si la conciliación está o no.
+    """
     pedido_lleno = serie_pedido_lleno(df_in)
 
     # Si faltan columnas, no romper
@@ -229,15 +250,15 @@ def etapa_excluyente(df_in: pd.DataFrame) -> pd.Series:
 
     conds = [
         df_in['fecha_elaboracion'].isnull(),
-        df_in['fecha_elaboracion'].notnull() & df_in['fecha_conciliacion'].isnull(),
-        df_in['fecha_conciliacion'].notnull() & (~pedido_lleno),
-        df_in['fecha_conciliacion'].notnull() & (pedido_lleno),
+        df_in['fecha_elaboracion'].notnull() & pedido_lleno,
+        df_in['fecha_elaboracion'].notnull() & (~pedido_lleno) & df_in['fecha_conciliacion'].isnull(),
+        df_in['fecha_elaboracion'].notnull() & (~pedido_lleno) & df_in['fecha_conciliacion'].notnull(),
     ]
     etapas = [
         "Por Elaborar",
+        "Pedido Recibido",
         "Por Conciliar",
         "Pendiente de Pedido",
-        "Pedido Recibido",
     ]
     return pd.Series(np.select(conds, etapas, default="Sin clasificar"), index=df_in.index)
 
@@ -498,27 +519,22 @@ st.caption(f"Vista: {filtro_estado} | Registros: {len(df_tablero)}")
 kpi_total = len(df_tablero)
 pedido_lleno = serie_pedido_lleno(df_tablero)
 
-por_elaborar = df_tablero['fecha_elaboracion'].isnull().sum() if 'fecha_elaboracion' in df_tablero.columns else 0
-por_conciliar = (
-    df_tablero['fecha_elaboracion'].notnull() &
-    df_tablero['fecha_conciliacion'].isnull()
-).sum() if ('fecha_elaboracion' in df_tablero.columns and 'fecha_conciliacion' in df_tablero.columns) else 0
-pendiente_pedido = (
-    df_tablero['fecha_conciliacion'].notnull() &
-    (~pedido_lleno)
-).sum() if 'fecha_conciliacion' in df_tablero.columns else 0
-pedido_recibido = (
-    df_tablero['fecha_conciliacion'].notnull() &
-    (pedido_lleno)
-).sum() if 'fecha_conciliacion' in df_tablero.columns else 0
+# Fuente única de verdad para las 4 etapas: etapa_excluyente() (ver ahí la regla de que
+# tener PEDIDO ya cuenta como "Pedido Recibido" aunque falte la conciliación). Antes los
+# conteos de esta tarjeta se calculaban aparte con su propia lógica duplicada — eso hacía
+# fácil que se desincronizaran del resto del tablero; ahora todo sale de la misma etapa.
+etapa_tablero = etapa_excluyente(df_tablero)
 
-sin_clasificar = max(0, kpi_total - (por_elaborar + por_conciliar + pendiente_pedido + pedido_recibido))
+por_elaborar = int((etapa_tablero == "Por Elaborar").sum())
+por_conciliar = int((etapa_tablero == "Por Conciliar").sum())
+pendiente_pedido = int((etapa_tablero == "Pendiente de Pedido").sum())
+pedido_recibido = int((etapa_tablero == "Pedido Recibido").sum())
+sin_clasificar = int((etapa_tablero == "Sin clasificar").sum())
 
 # --- Monto por etapa ---
 # En las primeras 3 etapas todavía no existe Importe Real (solo se sabe al recibir el pedido),
 # así que se muestra el Importe Previsto (promedio histórico). En "Pedido Recibido" ya se
 # conoce el Importe Real, así que se muestra ese.
-etapa_tablero = etapa_excluyente(df_tablero)
 tiene_previsto = 'importe_previsto' in df_tablero.columns
 tiene_real = 'importe_real' in df_tablero.columns
 
@@ -617,7 +633,7 @@ st.markdown(f"""
       <span class="badge" style="background:rgba(16,185,129,0.14); color:rgb(4,120,87);">{p4:.0%}</span>
     </div>
     <div class="pipe-value">{pedido_recibido}</div>
-    <div class="pipe-sub">Conciliada y con <b>pedido</b></div>
+    <div class="pipe-sub">Con <b>pedido</b> (con o sin conciliación)</div>
     <div class="pipe-money" style="color:rgb(4,120,87);">C$ {monto_pedido_recibido:,.2f}<span class="tag">real</span></div>
     <div class="pipe-bar"><span style="width:{p4*100:.0f}%; background:rgb(16,185,129)"></span></div>
   </div>

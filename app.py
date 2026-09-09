@@ -562,6 +562,9 @@ p1, p2, p3, p4 = (
     pct(pedido_recibido, kpi_total),
 )
 
+# Gran total del pipeline: Real (ya facturable, Etapa 4) + Previsto (estimado, Etapas 1-3).
+monto_gran_total = total_importe_real + monto_previsto_pipeline
+
 st.markdown(f"""
 <div class="pipe-wrap">
   <div class="pipe-card">
@@ -570,6 +573,7 @@ st.markdown(f"""
     </div>
     <div class="pipe-value">{kpi_total}</div>
     <div class="pipe-sub">Registros (según filtros)</div>
+    <div class="pipe-money" style="color:rgb(37,99,235);">C$ {monto_gran_total:,.2f}<span class="tag">real + previsto</span></div>
     <div class="pipe-bar"><span style="width:100%; background:rgb(37,99,235)"></span></div>
   </div>
   <div class="pipe-card pipe-highlight">

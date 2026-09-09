@@ -514,8 +514,6 @@ pedido_recibido = (
 
 sin_clasificar = max(0, kpi_total - (por_elaborar + por_conciliar + pendiente_pedido + pedido_recibido))
 
-total_importe_real = df_tablero['importe_real'].sum() if 'importe_real' in df_tablero.columns else 0
-
 # --- Monto por etapa ---
 # En las primeras 3 etapas todavía no existe Importe Real (solo se sabe al recibir el pedido),
 # así que se muestra el Importe Previsto (promedio histórico). En "Pedido Recibido" ya se
@@ -534,6 +532,25 @@ monto_por_conciliar = _monto_etapa("Por Conciliar", 'importe_previsto') if tiene
 monto_pendiente_pedido = _monto_etapa("Pendiente de Pedido", 'importe_previsto') if tiene_previsto else 0.0
 monto_pedido_recibido = _monto_etapa("Pedido Recibido", 'importe_real') if tiene_real else 0.0
 monto_previsto_pipeline = monto_por_elaborar + monto_por_conciliar + monto_pendiente_pedido
+
+# "Importe Real a Facturar" = el Real de las prefacturas que YA llegaron a "Pedido Recibido"
+# (misma cifra que la tarjeta de Etapa 4). Antes se sumaba el Importe Real de TODAS las filas
+# sin importar la etapa, lo que podía dar un total mayor al de "Pedido Recibido" cuando una
+# prefactura ya tenía Importe Real cargado pero todavía le faltaba la fecha de conciliación
+# (por eso el sistema aún no la clasificaba como recibida). Se deja el mismo número en ambas
+# tarjetas para que no parezcan cifras contradictorias.
+total_importe_real = monto_pedido_recibido
+
+# Aviso de datos: filas con Importe Real ya cargado pero que, por falta de fecha de
+# conciliación (o de número de pedido), todavía no cuentan como "Pedido Recibido". Ese monto
+# NO se ve reflejado en ninguna tarjeta hasta que se complete esa fecha en la fila.
+if tiene_real:
+    mask_real_sin_etapa4 = (df_tablero['importe_real'].fillna(0) > 0) & (etapa_tablero != "Pedido Recibido")
+    monto_real_sin_etapa4 = df_tablero.loc[mask_real_sin_etapa4, 'importe_real'].sum()
+    filas_real_sin_etapa4 = int(mask_real_sin_etapa4.sum())
+else:
+    monto_real_sin_etapa4 = 0.0
+    filas_real_sin_etapa4 = 0
 
 def pct(n, d):
     return (n / d) if d else 0
@@ -608,6 +625,15 @@ if not tiene_previsto:
 
 if sin_clasificar > 0:
     st.warning(f"⚠️ Hay {sin_clasificar} registros 'Sin clasificar' (revisa fechas/pedido).")
+
+if filas_real_sin_etapa4 > 0:
+    st.info(
+        f"ℹ️ {filas_real_sin_etapa4} prefactura(s) ya tienen Importe Real cargado "
+        f"(C$ {monto_real_sin_etapa4:,.2f}) pero todavía no cuentan como \"Pedido Recibido\" "
+        f"porque les falta la fecha de conciliación (o el número de pedido). Ese monto no "
+        f"aparece en ninguna tarjeta hasta que se complete esa fecha. Completa "
+        f"\"fecha_conciliacion\" en esas filas para que se sumen a Etapa 4."
+    )
 
 st.divider()
 

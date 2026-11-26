@@ -9,7 +9,7 @@ import re
 # =========================
 # 1) PAGE CONFIG
 # =========================
-st.set_page_config(page_title="PREFACTURAS", layout="wide")
+st.set_page_config(page_title="PREFACTURAS - Proyecto Ingeniería y Supervisión", layout="wide")
 
 # =========================
 # 2) SUPABASE CONNECTION
@@ -26,7 +26,7 @@ supabase = init_connection()
 # =========================
 # 3) UI HEADER
 # =========================
-st.title("⚡ PREFACTURAS")
+st.title("⚡ PREFACTURAS - Proyecto Ingeniería y Supervisión")
 from datetime import datetime, timezone, timedelta
 tz_nic = timezone(timedelta(hours=-6))
 st.caption(f"Última actualización: {datetime.now(tz_nic).strftime('%d/%m/%Y %H:%M')}")
@@ -1108,3 +1108,4 @@ st.download_button(
     file_name='control_entregas_ingenica.csv',
     mime='text/csv',
 )
+
